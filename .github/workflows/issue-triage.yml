@@ -166,9 +166,9 @@ jobs:
             }
 
             const missing = [];
-            if (missingLogs) missing.push('**Debug log** — run with `--log-level DEBUG` and paste the output. See [how to get debug logs](https://github.com/JeffSteinbok/RemarkableSync/blob/main/docs/debug-logs.md)');
+            if (missingLogs) missing.push('**Debug log** — run with `--log-level DEBUG` and paste the output. See [how to get debug logs](https://github.com/JeffSteinbok/reMarkableSync/blob/main/docs/debug-logs.md)');
             if (missingDescription) missing.push('**Description** — describe what you expected vs. what actually happened');
-            if (missingVersion) missing.push('**Version** — run `RemarkableSync --version` or `pip show remarkablesync`');
+            if (missingVersion) missing.push('**Version** — run `reMarkableSync --version` or `pip show remarkablesync`');
 
             await github.rest.issues.addLabels({
               owner: context.repo.owner,

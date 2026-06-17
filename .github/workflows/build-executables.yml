@@ -33,26 +33,26 @@ jobs:
 
       - name: Build Windows executable
         run: |
-          pyinstaller --clean release/RemarkableSync.spec
+          pyinstaller --clean release/reMarkableSync.spec
 
       - name: Create Windows distribution package
         run: |
-          mkdir RemarkableSync-Windows
-          xcopy /E /I dist\RemarkableSync RemarkableSync-Windows\RemarkableSync
-          copy README.md RemarkableSync-Windows\
-          powershell Compress-Archive -Path RemarkableSync-Windows -DestinationPath RemarkableSync-Windows.zip
+          mkdir reMarkableSync-Windows
+          xcopy /E /I dist\reMarkableSync reMarkableSync-Windows\reMarkableSync
+          copy README.md reMarkableSync-Windows\
+          powershell Compress-Archive -Path reMarkableSync-Windows -DestinationPath reMarkableSync-Windows.zip
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: RemarkableSync-Windows
-          path: RemarkableSync-Windows.zip
+          name: reMarkableSync-Windows
+          path: reMarkableSync-Windows.zip
 
       - name: Upload to Release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v1
         with:
-          files: RemarkableSync-Windows.zip
+          files: reMarkableSync-Windows.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -80,32 +80,32 @@ jobs:
 
       - name: Build macOS executable
         run: |
-          pyinstaller --clean release/RemarkableSync.spec
+          pyinstaller --clean release/reMarkableSync.spec
 
       - name: Create macOS distribution package
         run: |
-          mkdir -p RemarkableSync-macOS
-          # Copy the entire RemarkableSync directory (one-folder mode)
-          if [ -d "dist/RemarkableSync" ]; then
-            cp -r dist/RemarkableSync RemarkableSync-macOS/
+          mkdir -p reMarkableSync-macOS
+          # Copy the entire reMarkableSync directory (one-folder mode)
+          if [ -d "dist/reMarkableSync" ]; then
+            cp -r dist/reMarkableSync reMarkableSync-macOS/
           fi
-          cp README.md RemarkableSync-macOS/
+          cp README.md reMarkableSync-macOS/
           # Copy the launch script and make it executable
-          cp release/RemarkableSync.sh RemarkableSync-macOS/
-          chmod +x RemarkableSync-macOS/RemarkableSync.sh
+          cp release/reMarkableSync.sh reMarkableSync-macOS/
+          chmod +x reMarkableSync-macOS/reMarkableSync.sh
           # Create ZIP using subshell to avoid changing working directory
-          (cd RemarkableSync-macOS && zip -r ../RemarkableSync-macOS.zip .)
+          (cd reMarkableSync-macOS && zip -r ../reMarkableSync-macOS.zip .)
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: RemarkableSync-macOS
-          path: RemarkableSync-macOS.zip
+          name: reMarkableSync-macOS
+          path: reMarkableSync-macOS.zip
 
       - name: Upload to Release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v1
         with:
-          files: RemarkableSync-macOS.zip
+          files: reMarkableSync-macOS.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

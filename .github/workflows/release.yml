@@ -144,20 +144,20 @@ jobs:
 
       - name: Build Windows executable
         run: |
-          pyinstaller --clean release/RemarkableSync.spec
+          pyinstaller --clean release/reMarkableSync.spec
 
       - name: Create Windows distribution package
         run: |
-          mkdir RemarkableSync-Windows
-          xcopy /E /I dist\RemarkableSync RemarkableSync-Windows\RemarkableSync
-          copy README.md RemarkableSync-Windows\
-          powershell Compress-Archive -Path RemarkableSync-Windows -DestinationPath RemarkableSync-Windows.zip
+          mkdir reMarkableSync-Windows
+          xcopy /E /I dist\reMarkableSync reMarkableSync-Windows\reMarkableSync
+          copy README.md reMarkableSync-Windows\
+          powershell Compress-Archive -Path reMarkableSync-Windows -DestinationPath reMarkableSync-Windows.zip
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: RemarkableSync-Windows
-          path: RemarkableSync-Windows.zip
+          name: reMarkableSync-Windows
+          path: reMarkableSync-Windows.zip
 
   build-macos:
     needs: bump-version
@@ -191,23 +191,23 @@ jobs:
 
       - name: Build macOS executable
         run: |
-          pyinstaller --clean release/RemarkableSync.spec
+          pyinstaller --clean release/reMarkableSync.spec
 
       - name: Create macOS distribution package
         run: |
-          mkdir -p RemarkableSync-macOS
-          # Copy the entire RemarkableSync directory (one-folder mode)
-          if [ -d "dist/RemarkableSync" ]; then
-            cp -r dist/RemarkableSync RemarkableSync-macOS/
+          mkdir -p reMarkableSync-macOS
+          # Copy the entire reMarkableSync directory (one-folder mode)
+          if [ -d "dist/reMarkableSync" ]; then
+            cp -r dist/reMarkableSync reMarkableSync-macOS/
           fi
-          cp README.md RemarkableSync-macOS/
-          (cd RemarkableSync-macOS && zip -r ../RemarkableSync-macOS.zip .)
+          cp README.md reMarkableSync-macOS/
+          (cd reMarkableSync-macOS && zip -r ../reMarkableSync-macOS.zip .)
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: RemarkableSync-macOS
-          path: RemarkableSync-macOS.zip
+          name: reMarkableSync-macOS
+          path: reMarkableSync-macOS.zip
 
   # Create release with executables attached
   create-release:
@@ -220,12 +220,12 @@ jobs:
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
-          name: RemarkableSync-Windows
+          name: reMarkableSync-Windows
 
       - name: Download macOS artifact
         uses: actions/download-artifact@v4
         with:
-          name: RemarkableSync-macOS
+          name: reMarkableSync-macOS
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -250,10 +250,10 @@ jobs:
 
             #### Manual download
             Download the appropriate package for your platform below:
-            - **Windows**: `RemarkableSync-Windows.zip`
-            - **macOS**: `RemarkableSync-macOS.zip`
+            - **Windows**: `reMarkableSync-Windows.zip`
+            - **macOS**: `reMarkableSync-macOS.zip`
 
-            Extract the archive and run the `RemarkableSync` executable.
+            Extract the archive and run the `reMarkableSync` executable.
 
             ### Upgrading
 
@@ -265,13 +265,13 @@ jobs:
             pip install --upgrade remarkablesync
 
             # Check for updates from the CLI
-            RemarkableSync check-update
+            reMarkableSync check-update
             ```
 
 
           files: |
-            RemarkableSync-Windows.zip
-            RemarkableSync-macOS.zip
+            reMarkableSync-Windows.zip
+            reMarkableSync-macOS.zip
           draft: true
           prerelease: false
         env:

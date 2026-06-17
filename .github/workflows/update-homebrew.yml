@@ -52,7 +52,7 @@ jobs:
 
           # Commit and push
           git add Formula/remarkablesync.rb
-          git commit -m "Update RemarkableSync to ${{ steps.release.outputs.version }}"
+          git commit -m "Update reMarkableSync to ${{ steps.release.outputs.version }}"
           git push origin main
 
       - name: Test formula
