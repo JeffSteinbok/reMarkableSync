@@ -22,11 +22,15 @@ from ..ai.base_provider import BaseAIProvider
 class OCREngine:
     """Extract text from notebook PDF files using AI vision."""
 
+    # Target chunk height in pixels for OCR (smaller chunks = better recognition)
+    CHUNK_TARGET_HEIGHT = 800
+    CHUNK_OVERLAP_PCT = 0.15
+
     def __init__(
         self,
         ai_provider: Optional[BaseAIProvider] = None,
         use_ai: bool = True,
-        image_dpi: int = 150,
+        image_dpi: int = 300,
     ):
         """Initialise the OCR engine.
 
@@ -118,6 +122,57 @@ class OCREngine:
             logging.error("pdf2image failed for %s: %s", pdf_path.name, exc)
             return []
 
+    def _chunk_image(self, img_path: Path, output_dir: Path) -> List[Path]:
+        """Split a tall image into overlapping vertical chunks for better OCR.
+
+        Returns list of chunk image paths, or [img_path] if no chunking needed.
+        """
+        try:
+            from PIL import Image
+        except ImportError:
+            logging.debug("PIL not available for chunking, using original image")
+            return [img_path]
+
+        try:
+            with Image.open(img_path) as img:
+                w, h = img.size
+                num_chunks = max(1, h // self.CHUNK_TARGET_HEIGHT)
+
+                if num_chunks <= 1:
+                    return [img_path]
+
+                logging.debug(
+                    "Splitting %s (%dx%d) into %d chunks with %d%% overlap",
+                    img_path.name,
+                    w,
+                    h,
+                    num_chunks,
+                    int(self.CHUNK_OVERLAP_PCT * 100),
+                )
+
+                chunk_paths: List[Path] = []
+                base_chunk_h = h // num_chunks
+                overlap_px = int(base_chunk_h * self.CHUNK_OVERLAP_PCT)
+
+                for i in range(num_chunks):
+                    y_start = max(0, i * base_chunk_h - (overlap_px if i > 0 else 0))
+                    y_end = min(
+                        h, (i + 1) * base_chunk_h + (overlap_px if i < num_chunks - 1 else 0)
+                    )
+
+                    chunk = img.crop((0, y_start, w, y_end))
+                    chunk_path = output_dir / f"{img_path.stem}_chunk{i+1:02d}.png"
+                    chunk.save(chunk_path)
+                    chunk_paths.append(chunk_path)
+                    logging.debug(
+                        "  Chunk %d: %s (%dx%d)", i + 1, chunk_path.name, w, y_end - y_start
+                    )
+
+                return chunk_paths
+        except Exception as exc:  # noqa: BLE001
+            logging.warning("Failed to chunk image %s: %s", img_path.name, exc)
+            return [img_path]
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -154,23 +209,39 @@ class OCREngine:
                 for idx, pp in enumerate(page_pdfs, start=1):
                     if not pp.exists():
                         continue
-                    page_images = self.pdf_to_images(pp, tmp_dir / f"page_{idx:03d}")
+                    page_dir = tmp_dir / f"page_{idx:03d}"
+                    page_images = self.pdf_to_images(pp, page_dir)
                     if page_images:
-                        raw_part = self.ai_provider.transcribe_handwriting(
-                            page_images, context=f"{notebook_name} (page {idx})"
-                        )
-                        if raw_part:
-                            all_raw_parts.append(raw_part)
+                        # Chunk each page image for better OCR
+                        for img_path in page_images:
+                            chunks = self._chunk_image(img_path, page_dir)
+                            for ci, chunk_path in enumerate(chunks):
+                                chunk_ctx = f"{notebook_name} (page {idx}"
+                                if len(chunks) > 1:
+                                    chunk_ctx += f", part {ci + 1}/{len(chunks)}"
+                                chunk_ctx += ")"
+                                raw_part = self.ai_provider.transcribe_handwriting(
+                                    [chunk_path], context=chunk_ctx
+                                )
+                                if raw_part:
+                                    all_raw_parts.append(raw_part)
                     if on_page_done:
                         on_page_done(idx, total)
             else:
                 all_images = self.pdf_to_images(pdf_path, tmp_dir)
                 if all_images:
-                    raw_part = self.ai_provider.transcribe_handwriting(
-                        all_images, context=notebook_name
-                    )
-                    if raw_part:
-                        all_raw_parts.append(raw_part)
+                    # Chunk each page image for better OCR
+                    for img_path in all_images:
+                        chunks = self._chunk_image(img_path, tmp_dir)
+                        for ci, chunk_path in enumerate(chunks):
+                            chunk_ctx = notebook_name
+                            if len(chunks) > 1:
+                                chunk_ctx += f" (part {ci + 1}/{len(chunks)})"
+                            raw_part = self.ai_provider.transcribe_handwriting(
+                                [chunk_path], context=chunk_ctx
+                            )
+                            if raw_part:
+                                all_raw_parts.append(raw_part)
                 if on_page_done:
                     on_page_done(1, 1)
 

@@ -1,14 +1,14 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.9.0
-PackageIdentifier: JeffSteinbok.RemarkableSync
+PackageIdentifier: JeffSteinbok.reMarkableSync
 PackageVersion: 2.0.4
 InstallerType: zip
 NestedInstallerType: portable
 NestedInstallerFiles:
-  - RelativeFilePath: RemarkableSync-Windows\RemarkableSync\RemarkableSync.exe
+  - RelativeFilePath: reMarkableSync-Windows\reMarkableSync\reMarkableSync.exe
     PortableCommandAlias: remarkablesync
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/JeffSteinbok/RemarkableSync/releases/download/v2.0.4/RemarkableSync-Windows.zip
+    InstallerUrl: https://github.com/JeffSteinbok/reMarkableSync/releases/download/v2.0.4/reMarkableSync-Windows.zip
     InstallerSha256: 1F024A705736ABA0E8C64ACB40BEAAC86F4DC63626DF4E333C4F2B95257BB4FC
 ManifestType: installer
 ManifestVersion: 1.9.0

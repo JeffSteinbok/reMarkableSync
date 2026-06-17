@@ -69,3 +69,5 @@ run_sync.bat
 *.pkg
 
 test_backup
+output.md
+remarkable_backup/

@@ -1,6 +1,6 @@
 # How to Get DEBUG Logs
 
-When filing a bug report, a DEBUG log helps us diagnose the issue quickly. The log captures detailed information about every step RemarkableSync performs.
+When filing a bug report, a DEBUG log helps us diagnose the issue quickly. The log captures detailed information about every step reMarkableSync performs.
 
 ## Getting a DEBUG Log
 
@@ -8,9 +8,9 @@ Re-run the command that caused the issue with `--log-level DBG`:
 
 ```bash
 # Examples:
-RemarkableSync sync --log-level DBG
-RemarkableSync sync --wifi --log-level DBG
-RemarkableSync convert --log-level DBG
+reMarkableSync sync --log-level DBG
+reMarkableSync sync --wifi --log-level DBG
+reMarkableSync convert --log-level DBG
 ```
 
 This does two things:

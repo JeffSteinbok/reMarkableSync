@@ -40,7 +40,7 @@ def run_convert_command(
     """Execute the convert command.
 
     Args:
-        backup_dir: Directory containing ReMarkable backup files
+        backup_dir: Directory containing reMarkable backup files
         output_dir: Directory to save PDF files
         log_level: Log verbosity (DBG/INF/WRN/ERR)
         force_all: Convert all notebooks (ignore sync status)
@@ -50,7 +50,10 @@ def run_convert_command(
     Returns:
         Exit code (0 for success, 1 for failure)
     """
-    setup_logging(log_level)
+    from ..config import get_config_dir
+
+    log_dir = get_config_dir()
+    setup_logging(log_level, log_dir=log_dir)
     backup_dir = _resolve_backup_dir(backup_dir)
 
     if not backup_dir.exists():
@@ -69,7 +72,7 @@ def run_convert_command(
             print("[ERROR] No PDF directory configured. Run 'remarkablesync config' first.")
             return 1
 
-    print("ReMarkable PDF Converter")
+    print("reMarkable PDF Converter")
     print("=" * 70)
     print(f"Backup directory: {backup_dir}")
     print(f"Output directory: {output_dir}")

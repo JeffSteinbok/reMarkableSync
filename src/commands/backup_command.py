@@ -37,8 +37,9 @@ def run_backup_command(
     log_dir = backup_dir.parent
     setup_logging(log_level, log_dir=log_dir)
 
-    print("ReMarkable Tablet Backup")
-    print("=" * 70)
+    from ..utils.console import print_section
+
+    print_section("Backup")
     print(f"Backup directory: {backup_dir.absolute()}")
 
     if use_wifi:

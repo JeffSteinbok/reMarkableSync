@@ -35,7 +35,7 @@ def run_pipeline(
     use_ai_ocr: bool = True,
     notebook_filter: Optional[str] = None,
     page_filter: Optional[int] = None,
-    tags: str = "remarkable",
+    tags: str = "reMarkable",
     embed_images: bool = True,
     host: str = USB_HOST,
     use_wifi: bool = False,
@@ -86,7 +86,7 @@ def run_pipeline(
 
     print()
     print("=" * 70)
-    print("  ReMarkable -> Markdown Export")
+    print("  reMarkable -> Markdown Export")
     print("=" * 70)
     if not skip_backup:
         print(f"  * Backup via {conn_label} to {backup_dir.absolute()}")
@@ -207,7 +207,7 @@ def run_pipeline(
     elif use_ai_ocr:
         print_warn("  WRN - --use-ai-ocr set but no --ai-provider given. OCR skipped.")
 
-    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else ["remarkable"]
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else ["reMarkable"]
 
     exporter = MarkdownExporter(
         output_dir=output_dir,

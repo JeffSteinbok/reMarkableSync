@@ -1,14 +1,14 @@
-<h1><img src="docs/logo.png" height="32" style="vertical-align: middle;"> RemarkableSync</h1>
+<h1><img src="https://raw.githubusercontent.com/JeffSteinbok/reMarkableSync/main/docs/logo.png" height="32" style="vertical-align: middle;"> reMarkableSync</h1>
 
-![RemarkableSync](https://raw.githubusercontent.com/JeffSteinbok/RemarkableSync/main/githubSocial.png)
+![reMarkableSync](https://raw.githubusercontent.com/JeffSteinbok/reMarkableSync/main/githubSocial.png)
 
-[![GitHub](https://img.shields.io/badge/GitHub-RemarkableSync-blue?logo=github)](https://github.com/JeffSteinbok/RemarkableSync)
-[![GitHub release](https://img.shields.io/github/v/release/JeffSteinbok/RemarkableSync)](https://github.com/JeffSteinbok/RemarkableSync/releases)
-[![CI](https://github.com/JeffSteinbok/RemarkableSync/actions/workflows/ci.yml/badge.svg)](https://github.com/JeffSteinbok/RemarkableSync/actions/workflows/ci.yml)
-[![Build Executables](https://github.com/JeffSteinbok/RemarkableSync/actions/workflows/build-executables.yml/badge.svg)](https://github.com/JeffSteinbok/RemarkableSync/actions/workflows/build-executables.yml)
+[![GitHub](https://img.shields.io/badge/GitHub-reMarkableSync-blue?logo=github)](https://github.com/JeffSteinbok/reMarkableSync)
+[![GitHub release](https://img.shields.io/github/v/release/JeffSteinbok/reMarkableSync)](https://github.com/JeffSteinbok/reMarkableSync/releases)
+[![CI](https://github.com/JeffSteinbok/reMarkableSync/actions/workflows/ci.yml/badge.svg)](https://github.com/JeffSteinbok/reMarkableSync/actions/workflows/ci.yml)
+[![Build Executables](https://github.com/JeffSteinbok/reMarkableSync/actions/workflows/build-executables.yml/badge.svg)](https://github.com/JeffSteinbok/reMarkableSync/actions/workflows/build-executables.yml)
 [![PyPI version](https://img.shields.io/pypi/v/remarkablesync.svg)](https://pypi.org/project/remarkablesync/)
 [![Homebrew](https://img.shields.io/badge/Homebrew-remarkablesync-FBB040?logo=homebrew)](https://github.com/JeffSteinbok/homebrew-remarkablesync)
-[![Website](https://img.shields.io/badge/Website-jeffsteinbok.github.io-blue?logo=github-pages)](https://jeffsteinbok.github.io/RemarkableSync/)
+[![Website](https://img.shields.io/badge/Website-jeffsteinbok.github.io-blue?logo=github-pages)](https://jeffsteinbok.github.io/reMarkableSync/)
 
 A comprehensive Python toolkit for backing up reMarkable tablet notebooks, converting them to PDF, and transcribing handwriting to Markdown with AI — over USB or Wi-Fi.
 
@@ -44,7 +44,7 @@ pip install remarkablesync
 ### 2. Run the configuration wizard
 
 ```bash
-RemarkableSync config
+reMarkableSync config
 ```
 
 The wizard walks you through:
@@ -54,8 +54,8 @@ The wizard walks you through:
 | **Connection mode** | USB or Wi-Fi (wizard can enable Wi-Fi SSH for you) |
 | **SSH password** | Saved to system keyring |
 | **Backup directory** | `<AppData>/remarkablesync/backup` (internal sync data) |
-| **PDF output** | `~/Documents/RemarkableSync/PDF` |
-| **Markdown output** | `~/Documents/RemarkableSync/Markdown` |
+| **PDF output** | `~/Documents/reMarkableSync/PDF` |
+| **Markdown output** | `~/Documents/reMarkableSync/Markdown` |
 | **AI provider** | GitHub Models (free) or Claude (requires API key) |
 | **AI token** | Stored securely in system keyring |
 | **Folders** | Choose which tablet folders to sync (or all) |
@@ -63,20 +63,17 @@ The wizard walks you through:
 > [!TIP]
 > **Multi-device setup:** Use the folder filter to sync different tablet folders to different computers — e.g., sync your "Work" folder to your work PC and "Home" to your personal machine. Each machine gets its own config.
 
-> [!TIP]
-> Clear any directory field and press Enter to reset it to the default.
-
 ### 3. Run it
 
 ```bash
-RemarkableSync watch
+reMarkableSync watch
 ```
 
 This will use your configured defaults and launch a sync cycle (backup → PDF → Markdown), then keep running and re-sync every 30 minutes. Check your output directories to verify everything looks right.
 
 ### 4. Set it to run at startup
 
-Once you're happy with the output, enable run-at-startup from the system tray icon menu (or via the watch command). RemarkableSync will sync your tablet automatically in the background whenever your computer is on.
+Once you're happy with the output, enable run-at-startup from the system tray icon menu (or via the watch command). reMarkableSync will sync your tablet automatically in the background whenever your computer is on.
 
 > [!TIP]
 > **Obsidian users:** Point the Markdown output directory at a folder inside your Obsidian vault. Your handwritten notes appear as searchable Markdown with embedded page images. Pair with [Obsidian OneDrive Sync](https://github.com/JeffSteinbok/obsidian-onedrive) to sync your vault across devices.
@@ -107,21 +104,21 @@ After running `config`, most users only need `watch`. For one-off or scripted us
 
 ```bash
 # Default: backup + PDF conversion (uses saved config)
-RemarkableSync
+reMarkableSync
 
 # Full pipeline: backup + PDF + AI OCR + Markdown
-RemarkableSync md --with-backup --with-pdf
+reMarkableSync md --with-backup --with-pdf
 
 # Individual steps
-RemarkableSync backup          # backup only
-RemarkableSync convert         # PDF conversion only (from existing backup)
-RemarkableSync md              # Markdown export only (from existing PDFs)
+reMarkableSync backup          # backup only
+reMarkableSync convert         # PDF conversion only (from existing backup)
+reMarkableSync md              # Markdown export only (from existing PDFs)
 
 # Watch mode (periodic sync)
-RemarkableSync watch           # uses saved config for interval, dirs, AI
+reMarkableSync watch           # uses saved config for interval, dirs, AI
 
 # Check for updates
-RemarkableSync check-update
+reMarkableSync check-update
 ```
 
 ### Command Line Options
@@ -164,7 +161,7 @@ All commands read defaults from the saved config. CLI flags override config valu
 - `--systray / --no-systray` — system tray icon (default: enabled)
 
 **Updates:**
-- `RemarkableSync check-update` — check for newer versions
+- `reMarkableSync check-update` — check for newer versions
 - Update notifications appear automatically (checked once per day)
 
 ## Wi-Fi Connection
@@ -224,7 +221,7 @@ For any issue, re-run your command with `--log-level DBG` to get detailed output
 
 ## Acknowledgements
 
-RemarkableSync is built on top of these excellent open-source projects:
+reMarkableSync is built on top of these excellent open-source projects:
 
 | Library | Role |
 |---------|------|

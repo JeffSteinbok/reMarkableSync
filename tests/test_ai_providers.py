@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.ai import ClaudeProvider, GitHubModelsProvider, get_provider
+from src.ai import ClaudeProvider, GitHubCopilotProvider, GitHubModelsProvider, get_provider
 
 # ---------------------------------------------------------------------------
 # get_provider factory
@@ -23,7 +23,7 @@ class TestGetProvider:
 
     def test_returns_github_provider(self):
         p = get_provider("github", api_key="dummy")
-        assert isinstance(p, GitHubModelsProvider)
+        assert isinstance(p, GitHubCopilotProvider)
 
     def test_returns_github_for_github_models_alias(self):
         p = get_provider("github_models", api_key="dummy")

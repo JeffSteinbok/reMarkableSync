@@ -2,7 +2,7 @@
 """
 RemarkableSync - Unified command-line interface
 
-Single entry point for backing up and converting ReMarkable tablet files.
+Single entry point for backing up and converting reMarkable tablet files.
 """
 
 import os
@@ -31,7 +31,7 @@ if sys.version_info < (3, 11):
 
 import click
 
-from src.__version__ import __repository__, __version__
+from src.__version__ import __version__
 from src.backup.connection import USB_HOST
 from src.utils.logging import LogLevel
 
@@ -83,10 +83,28 @@ def add_log_level_option(func):
 
 
 def print_header():
-    """Print the application header, with a daily update check."""
-    click.echo(f"RemarkableSync v{__version__} by Jeff Steinbok")
-    click.echo(f"Repository: {__repository__}")
-    click.echo()
+    """Print the application header using Rich, with a daily update check."""
+    from rich.console import Console
+    from rich.panel import Panel
+    from rich.text import Text
+
+    from src.config import get_config_dir
+
+    log_file = get_config_dir() / "reMarkablesync.log"
+    console = Console(highlight=False)
+
+    # Create header panel - using brand blue color
+    brand_blue = "rgb(107,159,255)"
+    header = Text()
+    header.append("reMarkableSync", style=f"bold {brand_blue}")
+    header.append(f" v{__version__} ", style="white")
+    header.append("📝🔄", style="")
+    header.append(" by Jeff Steinbok\n", style="dim")
+    header.append("https://jeffsteinbok.github.io/reMarkableSync", style="link https://jeffsteinbok.github.io/reMarkableSync dim")
+
+    console.print(Panel(header, border_style=brand_blue, padding=(0, 2)))
+    console.print(f"[dim]Log file:[/dim] [link=file://{log_file}]{log_file}[/link]")
+    console.print()
 
     # Non-blocking daily update check (errors are silently ignored)
     try:
@@ -97,6 +115,24 @@ def print_header():
             click.echo(format_update_message(latest))
     except Exception:
         pass
+
+
+def check_config_compatibility() -> bool:
+    """Check if config is compatible with this version.
+
+    Returns True if OK, False if user needs to re-run config.
+    Prints an error message if config is outdated.
+    """
+    from src.config import check_config_version
+
+    is_valid, message = check_config_version()
+    if not is_valid:
+        click.echo()
+        click.secho("[CONFIG OUTDATED]", fg="yellow", bold=True)
+        click.echo(message)
+        click.echo()
+        return False
+    return True
 
 
 def version_callback(ctx, param, value):
@@ -126,9 +162,9 @@ def version_callback(ctx, param, value):
 )
 @click.pass_context
 def cli(ctx, log_level):
-    """RemarkableSync - Backup and convert ReMarkable tablet files.
+    """reMarkableSync - Backup and convert reMarkable tablet files.
 
-    A unified tool to backup your ReMarkable tablet via USB or Wi-Fi and
+    A unified tool to backup your reMarkable tablet via USB or Wi-Fi and
     convert notebooks to PDF format with template support. Notebooks can
     also be exported directly to a Markdown output directory with
     AI-transcribed text.
@@ -153,7 +189,7 @@ def cli(ctx, log_level):
     default=Path("./remarkable_backup"),
     help="Directory to store backup files",
 )
-@click.option("--password", "-p", type=str, help="ReMarkable SSH password")
+@click.option("--password", "-p", type=str, help="reMarkable SSH password")
 @add_log_level_option
 @click.option("--skip-templates", is_flag=True, help="Skip backing up template files")
 @click.option("--force", "-f", is_flag=True, help="Force backup all files (ignore sync status)")
@@ -168,9 +204,9 @@ def backup(
     use_wifi: bool,
     wifi_host: str,
 ):
-    """Backup files from ReMarkable tablet via USB or Wi-Fi.
+    """Backup files from reMarkable tablet via USB or Wi-Fi.
 
-    Connects to your ReMarkable tablet and backs up all files with incremental
+    Connects to your reMarkable tablet and backs up all files with incremental
     sync.  Template files are backed up by default unless --skip-templates is
     specified.
     """
@@ -201,7 +237,7 @@ def backup(
     "-d",
     type=click.Path(path_type=Path),
     default=Path("./remarkable_backup"),
-    help="Directory containing ReMarkable backup files",
+    help="Directory containing reMarkable backup files",
 )
 @click.option(
     "--output-dir",
@@ -223,7 +259,7 @@ def pdf(
 ):
     """Convert backed up notebooks to PDF format.
 
-    Converts ReMarkable notebooks to PDF with template backgrounds.
+    Converts reMarkable notebooks to PDF with template backgrounds.
     By default, only converts notebooks that were updated in the last backup.
     """
     from src.commands.convert_command import run_convert_command
@@ -244,7 +280,7 @@ def pdf(
     default=Path("./remarkable_backup"),
     help="Directory to store backup files",
 )
-@click.option("--password", "-p", type=str, help="ReMarkable SSH password")
+@click.option("--password", "-p", type=str, help="reMarkable SSH password")
 @add_log_level_option
 @click.option("--skip-templates", is_flag=True, help="Skip backing up template files")
 @click.option("--force-backup", is_flag=True, help="Force backup all files")
@@ -266,6 +302,10 @@ def sync(
     This is the most common use case: backup your tablet and then convert
     any notebooks that were updated during the backup.
     """
+    # Check config version compatibility
+    if not check_config_compatibility():
+        sys.exit(1)
+
     from src.commands.sync_command import run_sync_command
 
     sys.exit(
@@ -303,7 +343,7 @@ def sync(
     default=None,
     help="Markdown output directory (default: from config)",
 )
-@click.option("--password", "-p", type=str, help="ReMarkable SSH password")
+@click.option("--password", "-p", type=str, help="reMarkable SSH password")
 @add_log_level_option
 @click.option("--with-backup", is_flag=True, help="Also run tablet backup before export")
 @click.option("--with-pdf", is_flag=True, help="Also run PDF conversion before export")
@@ -320,7 +360,7 @@ def sync(
 @click.option(
     "--ai-api-key",
     default="",
-    envvar="REMARKABLE_AI_KEY",
+    envvar="reMarkable_AI_KEY",
     help="AI API key (falls back to config / env-vars)",
 )
 @click.option(
@@ -333,7 +373,7 @@ def sync(
 @click.option("--notebook", "-n", type=str, help="Export only this notebook (by name or UUID)")
 @click.option("--page", type=int, help="Export only this page number (requires --notebook)")
 @click.option(
-    "--tags", default="remarkable", help="Comma-separated tags to add to note frontmatter"
+    "--tags", default="reMarkable", help="Comma-separated tags to add to note frontmatter"
 )
 @click.option(
     "--no-images",
@@ -382,6 +422,10 @@ def md(
       # Full pipeline: backup + pdf + md
       RemarkableSync md --with-backup --with-pdf
     """
+    # Check config version compatibility
+    if not check_config_compatibility():
+        sys.exit(1)
+
     from src.commands.pipeline import run_pipeline
     from src.config import load_config
 
@@ -450,15 +494,255 @@ def md(
 
 
 @cli.command()
-def config():
+@click.option(
+    "--show",
+    is_flag=True,
+    help="Display current configuration without editing.",
+)
+@add_log_level_option
+def config(show: bool, log_level: str):
     """Interactive configuration wizard.
 
     Walks through connection mode, credentials, folder selection, and
     sync actions using an interactive terminal UI.
+
+    Use --show to view current settings without making changes.
     """
+    if show:
+        from src.commands.config_command import print_config_summary
+        from src.config import get_config_path, load_config
+
+        config_path = get_config_path()
+        if not config_path.exists():
+            click.echo("[ERROR] No configuration found.", err=True)
+            click.echo("Run 'RemarkableSync config' to create one.", err=True)
+            sys.exit(1)
+
+        cfg = load_config()
+        print_config_summary(cfg, config_path)
+        sys.exit(0)
+
     from src.commands.config_command import run_config_command
 
-    sys.exit(run_config_command())
+    sys.exit(run_config_command(log_level=log_level))
+
+
+# ---------------------------------------------------------------------------
+# test-md  (test PDF -> Markdown conversion on a single file)
+# ---------------------------------------------------------------------------
+
+
+@cli.command("test-md")
+@click.argument("pdf_file", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(dir_okay=False, path_type=Path),
+    help="Save markdown output to file (default: print to stdout)",
+)
+@click.option(
+    "--keep-images",
+    "-k",
+    type=click.Path(file_okay=False, path_type=Path),
+    help="Save rasterized images to this directory (for debugging)",
+)
+@click.option(
+    "--dpi",
+    type=int,
+    default=300,
+    show_default=True,
+    help="DPI for rasterizing PDF pages",
+)
+@click.option(
+    "--chunks",
+    type=int,
+    default=0,
+    help="Split page into N vertical chunks (0=auto based on page height)",
+)
+@click.option(
+    "--ai-provider",
+    type=click.Choice(["", "claude", "anthropic", "github", "github_models"]),
+    default=None,
+    help="AI provider for handwriting recognition",
+)
+@click.option(
+    "--ai-model",
+    default="",
+    help="Override AI model (provider-specific)",
+)
+@click.option(
+    "--ai-api-key",
+    default="",
+    help="AI API key (falls back to config / env-vars)",
+)
+@add_log_level_option
+def test_md(
+    pdf_file: Path,
+    output: Optional[Path],
+    keep_images: Optional[Path],
+    dpi: int,
+    chunks: int,
+    ai_provider: Optional[str],
+    ai_model: str,
+    ai_api_key: str,
+    log_level: str,
+):
+    """Test PDF to Markdown conversion on a single file.
+
+    Useful for debugging the OCR pipeline without a full backup.
+    Runs the PDF through the AI OCR engine and outputs the transcribed text.
+
+    Examples:
+
+      # Quick test with default settings
+      RemarkableSync test-md ~/Downloads/page.pdf
+
+      # Save output to file
+      RemarkableSync test-md ~/Downloads/page.pdf -o output.md
+
+      # Keep rasterized images for debugging
+      RemarkableSync test-md page.pdf -k ./debug_images -l dbg
+
+      # Use specific AI provider
+      RemarkableSync test-md page.pdf --ai-provider github
+    """
+    import shutil
+    import tempfile
+
+    from src.ai import get_provider as get_ai_provider
+    from src.config import get_config_dir, load_config
+    from src.ocr.ocr_engine import OCREngine
+    from src.utils.logging import setup_logging
+
+    setup_logging(log_level, log_dir=get_config_dir())
+
+    # Check config version compatibility
+    if not check_config_compatibility():
+        sys.exit(1)
+
+    # Resolve AI settings from config if not provided
+    cfg = load_config()
+    if ai_provider is None:
+        ai_provider = cfg.get("ai_provider", "github")
+    if not ai_model:
+        ai_model = cfg.get("ai_model", "")
+    if not ai_api_key:
+        from src.keyring_store import KEY_CLAUDE_API_KEY, KEY_GITHUB_TOKEN, get_secret
+
+        if ai_provider == "claude":
+            ai_api_key = get_secret(KEY_CLAUDE_API_KEY)
+        else:
+            ai_api_key = get_secret(KEY_GITHUB_TOKEN)
+
+    # Create AI provider and OCR engine
+    provider = get_ai_provider(ai_provider, model=ai_model, api_key=ai_api_key)
+    if not provider or not provider.is_available():
+        click.echo(f"[ERROR] AI provider '{ai_provider}' is not available.", err=True)
+        click.echo("Check your API key configuration.", err=True)
+        sys.exit(1)
+
+    engine = OCREngine(ai_provider=provider, image_dpi=dpi)
+
+    click.echo(f"Processing: {pdf_file}")
+    click.echo(f"AI Provider: {ai_provider}")
+    click.echo(f"Model: {provider.model}")
+    click.echo(f"DPI: {dpi}")
+    click.echo("-" * 50)
+
+    # Rasterize to temp or keep_images dir
+    if keep_images:
+        keep_images.mkdir(parents=True, exist_ok=True)
+        image_dir = keep_images
+        cleanup_dir = None
+    else:
+        cleanup_dir = tempfile.mkdtemp(prefix="rs_test_md_")
+        image_dir = Path(cleanup_dir)
+
+    try:
+        from PIL import Image
+
+        images = engine.pdf_to_images(pdf_file, image_dir)
+
+        # Log image details and determine chunking
+        chunk_images = []
+        if images:
+            for img_path in images:
+                with Image.open(img_path) as img:
+                    w, h = img.size
+                    click.echo(f"Image: {img_path} ({w}x{h})")
+
+                    # Determine number of chunks
+                    # Auto: ~800px per chunk is a good target for OCR
+                    if chunks == 0:
+                        num_chunks = max(1, h // 800)
+                    else:
+                        num_chunks = chunks
+
+                    if num_chunks > 1:
+                        click.echo(f"Splitting into {num_chunks} chunks with 15% overlap")
+                        # Split with overlap
+                        overlap_pct = 0.15
+                        base_chunk_h = h // num_chunks
+                        overlap_px = int(base_chunk_h * overlap_pct)
+
+                        for i in range(num_chunks):
+                            # Calculate chunk boundaries with overlap
+                            y_start = max(0, i * base_chunk_h - (overlap_px if i > 0 else 0))
+                            y_end = min(
+                                h,
+                                (i + 1) * base_chunk_h + (overlap_px if i < num_chunks - 1 else 0),
+                            )
+
+                            chunk = img.crop((0, y_start, w, y_end))
+                            chunk_path = image_dir / f"{img_path.stem}_chunk{i+1:02d}.png"
+                            chunk.save(chunk_path)
+                            chunk_images.append(chunk_path)
+                            click.echo(f"  Chunk {i+1}: {chunk_path.name} ({w}x{y_end - y_start})")
+                    else:
+                        chunk_images.append(img_path)
+
+        if keep_images:
+            click.echo(f"Images saved to: {keep_images}")
+
+        # Run OCR on the chunk images
+        if chunk_images and engine.use_ai and engine.ai_provider:
+            from src.ai.base_provider import AIProviderError
+
+            all_text_parts = []
+            for i, chunk_path in enumerate(chunk_images):
+                click.echo(f"Processing chunk {i+1}/{len(chunk_images)}...")
+                try:
+                    part_text = engine.ai_provider.transcribe_handwriting(
+                        [chunk_path], context=f"{pdf_file.stem} (part {i+1})"
+                    )
+                    if part_text:
+                        all_text_parts.append(part_text)
+                except AIProviderError as exc:
+                    # Extract clean error message
+                    err_msg = str(exc)
+                    if "unknown_model" in err_msg.lower():
+                        click.echo(f"[ERROR] Unknown model: {provider.model}", err=True)
+                        click.echo("Run 'RemarkableSync config' to select a valid model.", err=True)
+                    else:
+                        click.echo(f"[ERROR] AI provider error: {err_msg}", err=True)
+                    sys.exit(1)
+
+            # Join chunks and clean up
+            raw_text = "\n\n".join(all_text_parts)
+            processed_text = engine.ai_provider.cleanup_text(raw_text, context=pdf_file.stem)
+            text = processed_text or raw_text
+        else:
+            text = ""
+            click.echo("[WARN] No AI provider or images - no text extracted")
+
+        if output:
+            output.write_text(text, encoding="utf-8")
+            click.echo(f"Output saved to: {output}")
+        else:
+            click.echo(text)
+    finally:
+        if cleanup_dir:
+            shutil.rmtree(cleanup_dir, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------
@@ -565,6 +849,18 @@ def watch(
 
     # Detach to background unless --foreground
     if not foreground:
+        # Check if already running before spawning
+        backup_dir = Path(cfg.get("backup_dir", "./remarkable_backup"))
+        from src.commands.watch_command import FileLock
+
+        process_lock_path = backup_dir / ".remarkable_watch_process.lock"
+        test_lock = FileLock(process_lock_path)
+        if not test_lock.acquire():
+            click.echo("reMarkableSync watch is already running.")
+            click.echo("Use the system tray icon to control it.")
+            return
+        test_lock.release()  # Release so the child can acquire it
+
         _detach_watch()
         return
 
@@ -603,7 +899,7 @@ def watch(
             ai_api_key = get_secret(KEY_CLAUDE_API_KEY)
         else:
             ai_api_key = get_secret(KEY_GITHUB_TOKEN)
-        tags = c.get("tags", "remarkable")
+        tags = c.get("tags", "reMarkable")
 
         if "ocr" in sync_actions and odir:
             from src.commands.pipeline import run_pipeline
@@ -701,8 +997,8 @@ def _detach_watch():
             stderr=sp.DEVNULL,
         )
 
-    click.echo("  RemarkableSync watch started in the background.")
-    click.echo("  Use the system tray icon to control it.")
+    click.echo("reMarkableSync watch started in the background.")
+    click.echo("Use the system tray icon to control it.")
 
 
 # ---------------------------------------------------------------------------
@@ -720,7 +1016,7 @@ def main():
     Config-based defaults (backup_dir, output_dir, connection, etc.) are
     injected as CLI args so the subcommand sees them.
     """
-    known_commands = {"backup", "pdf", "sync", "md", "config", "watch", "check-update"}
+    known_commands = {"backup", "pdf", "sync", "md", "config", "watch", "check-update", "test-md"}
     has_command = any(arg in known_commands for arg in sys.argv[1:])
 
     if not has_command and "--version" not in sys.argv and "--help" not in sys.argv:
@@ -728,7 +1024,7 @@ def main():
         from src.config import get_config_path, load_config
 
         if not get_config_path().exists():
-            script_name = Path(sys.argv[0]).name or "RemarkableSync.py"
+            script_name = Path(sys.argv[0]).name or "reMarkableSync.py"
             click.echo("[ERROR] No configuration found.", err=True)
             click.echo(f"Run: python {script_name} config", err=True)
             sys.exit(1)

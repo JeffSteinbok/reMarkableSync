@@ -49,9 +49,12 @@ class TestOCREngine:
 
         raw, processed = engine.extract_text(pdf_path, notebook_name="Shopping List")
 
-        assert raw == "- Buy groceries\n- Call dentist"
+        # With chunking, raw text may be repeated per chunk
+        assert "- Buy groceries" in raw
+        assert "- Call dentist" in raw
         assert processed == "# Todo\n\n- Buy groceries\n- Call dentist"
-        assert mock_provider.transcribe_call_count == 1
+        # Chunking may split into multiple calls
+        assert mock_provider.transcribe_call_count >= 1
         assert mock_provider.cleanup_call_count == 1
 
     def test_extract_text_ai_unavailable_falls_through(self):
@@ -84,8 +87,8 @@ class TestOCREngine:
         engine = OCREngine(ai_provider=mock_provider, use_ai=True)
         engine.extract_text(pdf_path)
 
-        # Should have been called with at least one PNG path
-        assert mock_provider.transcribe_call_count == 1
+        # Should have been called with at least one PNG path (may be chunked)
+        assert mock_provider.transcribe_call_count >= 1
         paths = mock_provider._transcribe_calls[0]
         assert len(paths) >= 1
         assert all(p.suffix == ".png" for p in paths)

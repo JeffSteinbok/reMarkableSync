@@ -2,13 +2,60 @@
 
 import logging
 import os
+import platform
 import sys
+from datetime import datetime
 from enum import Enum
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional
 
+# Log rotation settings
+MAX_LOG_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB per file
+MAX_LOG_BACKUP_COUNT = 3  # Keep 3 rotated files (total 4 including current)
+
 # Custom level higher than CRITICAL — effectively silences the console
 _NONE_LEVEL = logging.CRITICAL + 10
+
+
+def _write_session_header(file_handler: RotatingFileHandler) -> None:
+    """Write a session header to the log file for easy identification."""
+    try:
+        from src.__version__ import __version__
+    except ImportError:
+        __version__ = "unknown"
+
+    # Get command line
+    cmd = " ".join(sys.argv)
+
+    # Build header
+    separator = "=" * 70
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    lines = [
+        "",
+        separator,
+        f"SESSION START: {timestamp}",
+        separator,
+        f"Command: {cmd}",
+        f"Version: RemarkableSync v{__version__}",
+        f"Python: {platform.python_version()}",
+        f"Platform: {platform.system()} {platform.release()}",
+        separator,
+        "",
+    ]
+
+    # Write directly to file handler
+    for line in lines:
+        record = logging.LogRecord(
+            name="session",
+            level=logging.INFO,
+            pathname="",
+            lineno=0,
+            msg=line,
+            args=(),
+            exc_info=None,
+        )
+        file_handler.emit(record)
 
 
 class LogLevel(str, Enum):
@@ -105,11 +152,17 @@ def setup_logging(
         console_handler.setLevel(console_level)
         root.addHandler(console_handler)
 
-    # --- File handler (always DEBUG) ---
+    # --- File handler with rotation (always DEBUG) ---
     if log_dir:
         log_dir.mkdir(parents=True, exist_ok=True)
         log_file = log_dir / "remarkablesync.log"
-        file_handler = logging.FileHandler(log_file, mode="w", encoding="utf-8")
+        file_handler = RotatingFileHandler(
+            log_file,
+            mode="a",
+            maxBytes=MAX_LOG_SIZE_BYTES,
+            backupCount=MAX_LOG_BACKUP_COUNT,
+            encoding="utf-8",
+        )
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(
             logging.Formatter(
@@ -118,6 +171,9 @@ def setup_logging(
             )
         )
         root.addHandler(file_handler)
+
+        # Write session header to log file for easy identification
+        _write_session_header(file_handler)
 
     logging.debug(
         "Interactive: %s, Console log level: %s, Log dir: %s", interactive, log_level.value, log_dir

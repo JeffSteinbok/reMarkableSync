@@ -1,7 +1,7 @@
 """
-ReMarkable tablet SSH connection management.
+reMarkable tablet SSH connection management.
 
-Handles SSH and SCP connections to ReMarkable tablets for file transfer
+Handles SSH and SCP connections to reMarkable tablets for file transfer
 and remote command execution.
 
 Connection modes
@@ -39,7 +39,7 @@ except ImportError:
 USB_HOST = "10.11.99.1"
 
 # mDNS/Bonjour hostname that many reMarkable tablets advertise on the LAN
-MDNS_HOSTNAME = "remarkable.local"
+MDNS_HOSTNAME = "reMarkable.local"
 
 
 def discover_tablet_host(timeout: float = 3.0) -> Optional[str]:
@@ -67,14 +67,14 @@ def discover_tablet_host(timeout: float = 3.0) -> Optional[str]:
 
 
 class ReMarkableConnection:
-    """Handles SSH connection to ReMarkable tablet.
+    """Handles SSH connection to reMarkable tablet.
 
     Provides a robust connection interface with retry logic and error handling
-    for connecting to ReMarkable tablets via USB or Wi-Fi networking.
+    for connecting to reMarkable tablets via USB or Wi-Fi networking.
     """
 
-    KEYRING_SERVICE = "RemarkableSync"
-    KEYRING_USERNAME = "remarkable_ssh"
+    KEYRING_SERVICE = "reMarkableSync"
+    KEYRING_USERNAME = "reMarkable_ssh"
 
     def __init__(
         self,
@@ -90,7 +90,7 @@ class ReMarkableConnection:
         """Initialize connection parameters.
 
         Args:
-            host: ReMarkable tablet IP address (default USB networking address).
+            host: reMarkable tablet IP address (default USB networking address).
                   Ignored when *use_wifi* is True and *wifi_host* is provided.
             username: SSH username (always 'root' for ReMarkable)
             port: SSH port (default 22)
@@ -176,7 +176,7 @@ class ReMarkableConnection:
     def get_password(self) -> str:
         """Get SSH password from user input or saved keyring.
 
-        The ReMarkable tablet's SSH password is found in:
+        The reMarkable tablet's SSH password is found in:
         Settings > Help > Copyright and licenses > GPLv3 Compliance
 
         Returns:
@@ -191,7 +191,7 @@ class ReMarkableConnection:
                 return self.password
 
             # No saved password, prompt user
-            print("To get your ReMarkable SSH password:")
+            print("To get your reMarkable SSH password:")
             print("1. Connect your tablet via USB")
             print("2. Go to Settings > Help > Copyright and licenses")
             print("3. Find the password under 'GPLv3 Compliance'")
@@ -200,7 +200,7 @@ class ReMarkableConnection:
         return self.password
 
     def connect(self) -> bool:
-        """Establish SSH connection to ReMarkable tablet.
+        """Establish SSH connection to reMarkable tablet.
 
         Runs the pre-sync command (if configured) before opening the SSH
         connection, and the post-sync command (if configured) in disconnect().
@@ -235,13 +235,29 @@ class ReMarkableConnection:
                 password = self.get_password()
 
                 # Try multiple connection approaches for ReMarkable compatibility
+                # First attempt is quick (5s) to fail fast if tablet is unreachable
                 connection_attempts = [
-                    {"timeout": 30, "banner_timeout": 30, "auth_timeout": 30},
-                    {"timeout": 60, "banner_timeout": 60, "auth_timeout": 60},
+                    {"timeout": 5, "banner_timeout": 5, "auth_timeout": 10},
+                    {"timeout": 15, "banner_timeout": 15, "auth_timeout": 15},
                 ]
+                total_timeout = sum(p["timeout"] for p in connection_attempts)
+
+                print(f"  Connecting to {self.host} (up to {total_timeout}s)...")
 
                 for i, params in enumerate(connection_attempts):
                     try:
+                        # Quick TCP check before full SSH handshake
+                        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        sock.settimeout(params["timeout"])
+                        try:
+                            sock.connect((self.host, self.port))
+                            sock.close()
+                        except (socket.timeout, OSError) as e:
+                            logging.info("TCP connect failed on attempt %d: %s", i + 1, e)
+                            if i < len(connection_attempts) - 1:
+                                continue  # Try next timeout
+                            raise  # Last attempt, let it bubble up
+
                         logging.info(
                             "Connection attempt %d with timeout %ds...", i + 1, params["timeout"]
                         )
@@ -261,7 +277,7 @@ class ReMarkableConnection:
                         if transport is None:
                             raise ConnectionError("Failed to get SSH transport")
                         self.scp_client = SCPClient(transport)
-                        logging.info("Connected to ReMarkable tablet at %s", self.host)
+                        logging.info("Connected to reMarkable tablet at %s", self.host)
 
                         return True
 
@@ -322,13 +338,13 @@ class ReMarkableConnection:
         return False
 
     def disconnect(self):
-        """Close SSH and SCP connections to ReMarkable tablet."""
+        """Close SSH and SCP connections to reMarkable tablet."""
         print("  Disconnecting...")
         if self.scp_client:
             self.scp_client.close()
         if self.ssh_client:
             self.ssh_client.close()
-        logging.info("Disconnected from ReMarkable tablet")
+        logging.info("Disconnected from reMarkable tablet")
 
         if self.post_sync_command:
             from ..utils import run_shell_command
@@ -341,7 +357,7 @@ class ReMarkableConnection:
                 print_success("  OK - Post-sync done")
 
     def execute_command(self, command: str) -> Tuple[str, str, int]:
-        """Execute command on ReMarkable tablet via SSH.
+        """Execute command on reMarkable tablet via SSH.
 
         Args:
             command: Shell command to execute on the tablet
@@ -353,7 +369,7 @@ class ReMarkableConnection:
             ConnectionError: If not connected to tablet
         """
         if not self.ssh_client:
-            raise ConnectionError("Not connected to ReMarkable tablet")
+            raise ConnectionError("Not connected to reMarkable tablet")
 
         _, stdout, stderr = self.ssh_client.exec_command(command)
         exit_code = stdout.channel.recv_exit_status()

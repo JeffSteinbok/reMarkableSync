@@ -10,9 +10,20 @@ from rich.progress import (
     TextColumn,
     TimeElapsedColumn,
 )
+from rich.rule import Rule
 
 # Shared console instance — stdout so print() and Rich output stay on the same stream
-console = Console(stderr=False)
+console = Console(stderr=False, highlight=False)
+
+
+def print_section(title: str) -> None:
+    """Print a section header with a rule line."""
+    console.print(Rule(f"[bold bright_white]{title}[/bold bright_white]", style="bright_blue"))
+
+
+def print_rule() -> None:
+    """Print a simple separator rule."""
+    console.print(Rule(style="dim"))
 
 
 def print_error(msg: str) -> None:

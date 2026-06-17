@@ -9,7 +9,7 @@ Entry Point:
     RemarkableSync.py sync [OPTIONS]
 
 This module provides:
-- SSH connection management to ReMarkable tablet
+- SSH connection management to reMarkable tablet
 - File synchronization with incremental updates
 - Metadata management and tracking
 - Optional automatic PDF conversion after backup
@@ -29,7 +29,7 @@ from .metadata import FileMetadata
 
 
 class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
-    """Main backup orchestrator for ReMarkable tablet.
+    """Main backup orchestrator for reMarkable tablet.
 
     Coordinates SSH connection, file synchronization, metadata management,
     and optional PDF conversion to provide a complete backup solution.
@@ -180,7 +180,7 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
     def _do_backup_files(
         self,
     ) -> Tuple[bool, Set[str], Dict[str, Set[str]]]:  # pylint: disable=too-many-branches
-        """Backup files from ReMarkable tablet. Assumes connection is already open."""
+        """Backup files from reMarkable tablet. Assumes connection is already open."""
         logging.info("Starting file backup...")
 
         try:
@@ -194,7 +194,7 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
             print(f"  Scanned {len(remote_files)} files on tablet")
 
             if not remote_files:
-                logging.warning("No files found on ReMarkable tablet")
+                logging.warning("No files found on reMarkable tablet")
                 return True, set(), {}
 
             # Apply folder filter — only sync files belonging to allowed UUIDs
@@ -214,7 +214,7 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
                 print(f"  Filtered to {len(remote_files)} files (from {before} total)")
 
             if not remote_files:
-                logging.warning("No files found on ReMarkable tablet")
+                logging.warning("No files found on reMarkable tablet")
                 return True, set(), {}
 
             # Filter files that need syncing
@@ -311,7 +311,7 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
             return False, set(), {}
 
     def _do_backup_templates(self) -> bool:
-        """Backup template files from ReMarkable tablet. Assumes connection is already open."""
+        """Backup template files from reMarkable tablet. Assumes connection is already open."""
         logging.info("Starting template backup...")
 
         try:
@@ -319,7 +319,7 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
             remote_files = self.connection.list_files(self.remote_templates_dir)
 
             if not remote_files:
-                logging.warning("No template files found on ReMarkable tablet")
+                logging.warning("No template files found on reMarkable tablet")
                 return True
 
             # Filter templates that need syncing
@@ -454,7 +454,7 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
         Returns:
             Tuple of (success, updated_notebook_uuids, updated_pages)
         """
-        logging.info("Starting ReMarkable backup process")
+        logging.info("Starting reMarkable backup process")
 
         if not self.connection.connect():
             return False, set(), {}

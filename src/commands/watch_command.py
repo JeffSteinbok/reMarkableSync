@@ -34,7 +34,7 @@ INTERVAL_CHOICES = [
 
 # Registry key for Windows startup
 _STARTUP_REG_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-_STARTUP_REG_NAME = "RemarkableSync"
+_STARTUP_REG_NAME = "reMarkableSync"
 
 
 # ---------------------------------------------------------------------------
@@ -186,7 +186,7 @@ def _set_startup_enabled(enabled: bool) -> bool:
             desktop.write_text(
                 f"""[Desktop Entry]
 Type=Application
-Name=RemarkableSync Watch
+Name=reMarkableSync Watch
 Exec={cmd_line}
 Hidden=false
 NoDisplay=false
@@ -255,13 +255,33 @@ class _WatchTray:
         self._interval = secs
         self._rebuild_icon_menu()
 
-    def _build_icon_image(self, color: str):
-        """Create a small circular tray icon image."""
+    def _build_icon_image(self, color: str = None):
+        """Load the app logo for tray icon, with colored status dot in corner."""
+        from pathlib import Path
+
         from PIL import Image, ImageDraw
 
+        # Try to load the logo
+        logo_path = Path(__file__).parent.parent.parent / "docs" / "logo.png"
+        if logo_path.exists():
+            try:
+                image = Image.open(logo_path).convert("RGBA")
+                image = image.resize((64, 64), Image.LANCZOS)
+
+                # Add a small colored status dot in corner
+                if color:
+                    draw = ImageDraw.Draw(image)
+                    draw.ellipse((42, 42, 62, 62), fill=color, outline="white", width=2)
+
+                return image
+            except Exception:
+                pass
+
+        # Fallback to simple circle if logo not found
         image = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
         draw = ImageDraw.Draw(image)
-        draw.ellipse((8, 8, 56, 56), fill=color)
+        fill_color = color or "#4A90E2"
+        draw.ellipse((8, 8, 56, 56), fill=fill_color)
         draw.ellipse((20, 20, 44, 44), fill=(255, 255, 255, 190))
         return image
 
@@ -275,7 +295,7 @@ class _WatchTray:
         self._detail = (text[:60] + "…") if len(text) > 60 else text
         if self._icon:
             try:
-                self._icon.title = f"RemarkableSync - {self._detail}"
+                self._icon.title = f"reMarkableSync - {self._detail}"
             except Exception:
                 pass
             self._rebuild_icon_menu()
@@ -499,7 +519,7 @@ class _WatchTray:
             self._icon = pystray.Icon(
                 "remarkablesync-watch",
                 self._build_icon_image("#4A90E2"),
-                title="RemarkableSync",
+                title="reMarkableSync",
                 menu=self._build_menu(),
             )
             if hasattr(self._icon, "run_detached"):
@@ -539,7 +559,7 @@ class _WatchTray:
         if self._icon:
             try:
                 self._icon.icon = self._build_icon_image(color)
-                self._icon.title = f"RemarkableSync - {status}"
+                self._icon.title = f"reMarkableSync - {status}"
             except Exception:
                 pass
 
@@ -575,7 +595,7 @@ class _StatusWindow(threading.Thread):
 
         root = tk.Tk()
         self._root = root
-        root.title("RemarkableSync")
+        root.title("reMarkableSync")
         root.geometry("576x320")
         root.resizable(True, True)
         root.configure(bg="#1e1e1e")
@@ -706,13 +726,23 @@ class _StatusWindow(threading.Thread):
                 self._progress_var.set(0)
                 self._progress_label.configure(text="")
 
-            # Update log lines
+            # Update log lines only if changed (preserve scroll/selection)
             lines = tray.get_log_lines()
-            self._log_text.configure(state=tk.NORMAL)
-            self._log_text.delete("1.0", tk.END)
-            self._log_text.insert(tk.END, "\n".join(lines))
-            self._log_text.see(tk.END)
-            self._log_text.configure(state=tk.DISABLED)
+            new_content = "\n".join(lines)
+            current_content = self._log_text.get("1.0", "end-1c")
+            if new_content != current_content:
+                # Check if scrolled to bottom before update
+                yview = self._log_text.yview()
+                at_bottom = yview[1] >= 0.99
+
+                self._log_text.configure(state=tk.NORMAL)
+                self._log_text.delete("1.0", tk.END)
+                self._log_text.insert(tk.END, new_content)
+                self._log_text.configure(state=tk.DISABLED)
+
+                # Auto-scroll only if was at bottom
+                if at_bottom:
+                    self._log_text.see(tk.END)
 
         except Exception:
             pass
@@ -843,6 +873,16 @@ def run_watch_command(
         Exit code (0).  Returns when interrupted via Ctrl-C or tray Quit.
     """
     setup_logging(log_level)
+    backup_dir.mkdir(parents=True, exist_ok=True)
+
+    # Prevent multiple watch instances from running simultaneously
+    process_lock_path = backup_dir / ".remarkable_watch_process.lock"
+    process_lock = FileLock(process_lock_path)
+    if not process_lock.acquire():
+        print("Another reMarkableSync watch instance is already running.")
+        print("Please quit the existing instance first (system tray → Quit).")
+        return 1
+
     tray = _WatchTray(
         mode=mode,
         enabled=use_systray,
@@ -858,9 +898,8 @@ def run_watch_command(
     logging.getLogger().addHandler(tray_handler)
 
     lock_path = backup_dir / ".remarkable_watch.lock"
-    backup_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"RemarkableSync Watch ({mode})")
+    print(f"reMarkableSync Watch ({mode})")
     print("=" * 70)
     label = _format_interval(interval) if interval else "manual (Sync Now only)"
     print(f"  Interval   : {label}")
@@ -983,4 +1022,5 @@ def run_watch_command(
     logging.getLogger().removeHandler(tray_handler)
     tray.set_status("Stopped")
     tray.stop()
+    process_lock.release()
     return 0

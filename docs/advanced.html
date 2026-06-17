@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced Usage — RemarkableSync</title>
+    <title>Advanced Usage — reMarkableSync</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="apple-touch-icon" href="apple-touch-icon.png">
     <style>
@@ -206,14 +206,14 @@
     <nav>
         <div class="nav-inner">
             <a href="index.html" class="nav-logo">
-                <img src="logo.png" alt="RemarkableSync">
-                RemarkableSync
+                <img src="logo.png" alt="reMarkableSync">
+                reMarkableSync
             </a>
             <div class="nav-links">
                 <a href="index.html#features">Features</a>
                 <a href="index.html#install">Install</a>
                 <a href="index.html#using">Usage</a>
-                <a href="https://github.com/JeffSteinbok/RemarkableSync" target="_blank" rel="noopener noreferrer" class="nav-github" aria-label="View on GitHub">
+                <a href="https://github.com/JeffSteinbok/reMarkableSync" target="_blank" rel="noopener noreferrer" class="nav-github" aria-label="View on GitHub">
                     <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
                 </a>
             </div>
@@ -228,12 +228,12 @@
 
         <h2>Commands</h2>
 
-        <h3>RemarkableSync sync</h3>
+        <h3>reMarkableSync sync</h3>
         <p>The default workflow — backs up your tablet and converts any updated notebooks to PDF.</p>
-        <pre><code>RemarkableSync sync                    # USB connection
-RemarkableSync sync --wifi             # Wi-Fi connection
-RemarkableSync sync --force-backup     # Re-download all files
-RemarkableSync sync --force-convert    # Re-convert all notebooks</code></pre>
+        <pre><code>reMarkableSync sync                    # USB connection
+reMarkableSync sync --wifi             # Wi-Fi connection
+reMarkableSync sync --force-backup     # Re-download all files
+reMarkableSync sync --force-convert    # Re-convert all notebooks</code></pre>
 
         <table>
             <tr><th>Option</th><th>Description</th></tr>
@@ -245,10 +245,10 @@ RemarkableSync sync --force-convert    # Re-convert all notebooks</code></pre>
             <tr><td><code>--log-level LEVEL</code></td><td>Set verbosity: <code>DBG</code>, <code>INF</code>, <code>WRN</code>, <code>ERR</code></td></tr>
         </table>
 
-        <h3>RemarkableSync watch</h3>
+        <h3>reMarkableSync watch</h3>
         <p>Runs sync automatically on a schedule with a system tray icon for status and control.</p>
-        <pre><code>RemarkableSync watch                   # Default interval from config
-RemarkableSync watch --interval 300    # Sync every 5 minutes</code></pre>
+        <pre><code>reMarkableSync watch                   # Default interval from config
+reMarkableSync watch --interval 300    # Sync every 5 minutes</code></pre>
 
         <p>The system tray menu lets you:</p>
         <ul style="color: var(--text-dim); margin-bottom: 1rem; padding-left: 1.5rem;">
@@ -260,19 +260,19 @@ RemarkableSync watch --interval 300    # Sync every 5 minutes</code></pre>
             <li>Enable "Run at Startup"</li>
         </ul>
 
-        <h3>RemarkableSync backup</h3>
+        <h3>reMarkableSync backup</h3>
         <p>Only download files from the tablet — no conversion.</p>
-        <pre><code>RemarkableSync backup
-RemarkableSync backup --wifi --force-backup</code></pre>
+        <pre><code>reMarkableSync backup
+reMarkableSync backup --wifi --force-backup</code></pre>
 
-        <h3>RemarkableSync convert</h3>
+        <h3>reMarkableSync convert</h3>
         <p>Only convert already-backed-up notebooks to PDF — no tablet connection needed.</p>
-        <pre><code>RemarkableSync convert
-RemarkableSync convert --force-convert</code></pre>
+        <pre><code>reMarkableSync convert
+reMarkableSync convert --force-convert</code></pre>
 
         <h2>Full Pipeline</h2>
         <p>The <code>pipeline</code> command runs the complete flow: backup → PDF → AI OCR → Markdown export.</p>
-        <pre><code>RemarkableSync pipeline \
+        <pre><code>reMarkableSync pipeline \
   --output-dir ~/Documents/Notes \
   --ai-provider github</code></pre>
 
@@ -291,16 +291,66 @@ RemarkableSync convert --force-convert</code></pre>
 
         <h2>Logging & Debugging</h2>
         <p>All commands accept <code>--log-level DBG</code> for detailed output. A log file is also written to your backup directory's parent folder at <code>remarkablesync.log</code>.</p>
-        <pre><code>RemarkableSync sync --log-level DBG</code></pre>
+        <pre><code>reMarkableSync sync --log-level DBG</code></pre>
         <p>See <a href="debug-logs.html" style="color: var(--accent);">How to get DEBUG logs</a> for full details on log file locations.</p>
 
         <h2>Configuration</h2>
-        <p>Settings are stored in <code>&lt;AppData&gt;/remarkablesync/config.json</code>. You can edit this file directly or re-run <code>RemarkableSync config</code> at any time.</p>
+        <p>Settings are stored in <code>&lt;AppData&gt;/remarkablesync/config.json</code>. You can edit this file directly or re-run <code>reMarkableSync config</code> at any time.</p>
         <p>Sensitive values (SSH password, AI API keys) are stored in your system keyring — never in the config file.</p>
+
+        <h2>Custom OCR Instructions</h2>
+        <p>You can customize how the AI transcribes your handwriting by providing a Markdown file with additional instructions. This is useful for:</p>
+        <ul style="color: var(--text-dim); margin-bottom: 1rem; padding-left: 1.5rem;">
+            <li>Specifying terminology, abbreviations, or jargon specific to your field</li>
+            <li>Instructing the AI to format output in a particular way</li>
+            <li>Adding context about your handwriting style</li>
+        </ul>
+
+        <h3>Setup</h3>
+        <p>Create a file at the default location:</p>
+        <pre><code># macOS/Linux
+~/.config/remarkablesync/custom_instructions.md
+
+# Windows
+%APPDATA%\remarkablesync\custom_instructions.md</code></pre>
+
+        <p>Or specify a custom path during <code>reMarkableSync config</code> when prompted for "Custom OCR instructions file".</p>
+
+        <h3>Example</h3>
+        <pre><code># Custom OCR Instructions
+
+- I use "K8s" as shorthand for Kubernetes
+- Convert "→" arrows to "->" in code contexts
+- My handwritten "l" and "1" look similar - prefer letters in words
+- Format any code snippets with proper markdown fencing</code></pre>
+
+        <h2>Pre/Post Sync Commands</h2>
+        <p>You can run custom shell commands before and after each sync cycle. This is useful for:</p>
+        <ul style="color: var(--text-dim); margin-bottom: 1rem; padding-left: 1.5rem;">
+            <li>Git commits after sync completes</li>
+            <li>Sending notifications</li>
+            <li>Triggering external backup tools</li>
+            <li>Running custom scripts</li>
+        </ul>
+
+        <h3>Setup</h3>
+        <p>Add these fields to your <code>config.json</code>:</p>
+        <pre><code>{
+  "pre_sync_command": "echo 'Starting sync...'",
+  "post_sync_command": "cd ~/Notes && git add -A && git commit -m 'Auto-sync'"
+}</code></pre>
+
+        <table>
+            <tr><th>Field</th><th>When it runs</th></tr>
+            <tr><td><code>pre_sync_command</code></td><td>Before backup starts</td></tr>
+            <tr><td><code>post_sync_command</code></td><td>After all sync actions complete (backup, PDF, OCR)</td></tr>
+        </table>
+
+        <p>Commands run in a shell (<code>sh -c</code> on macOS/Linux, <code>cmd /c</code> on Windows). If a pre-sync command fails, the sync continues. Post-sync command failures are logged but don't affect the sync result.</p>
     </div>
 
     <footer>
-        <p>MIT License · Made by <a href="https://github.com/JeffSteinbok">Jeff Steinbok</a> · <a href="https://github.com/JeffSteinbok/RemarkableSync">Source on GitHub</a></p>
+        <p>MIT License · Made by <a href="https://github.com/JeffSteinbok">Jeff Steinbok</a> · <a href="https://github.com/JeffSteinbok/reMarkableSync">Source on GitHub</a></p>
     </footer>
 
 </body>

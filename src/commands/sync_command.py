@@ -49,7 +49,7 @@ def run_sync_command(
 
     config = load_config()
 
-    print("ReMarkable Sync (Backup + Convert)")
+    print("reMarkable Sync (Backup + Convert)")
     print("=" * 70)
     print(f"Backup directory: {backup_dir.absolute()}")
 

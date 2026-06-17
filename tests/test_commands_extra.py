@@ -221,9 +221,12 @@ class TestRunConvertCommand:
 
     @patch("src.commands.convert_command.run_conversion")
     def test_uses_existing_configured_backup_dir_when_cli_default_missing(
-        self, mock_convert, tmp_path
+        self, mock_convert, tmp_path, monkeypatch
     ):
         from src.commands.convert_command import run_convert_command
+
+        # Change to tmp_path so ./remarkable_backup doesn't exist
+        monkeypatch.chdir(tmp_path)
 
         mock_convert.return_value = (True, {}, [])
         configured_backup = tmp_path / "configured_backup"
@@ -245,8 +248,13 @@ class TestRunConvertCommand:
         assert mock_convert.call_args.kwargs["backup_dir"] == configured_backup
 
     @patch("src.commands.convert_command.run_conversion")
-    def test_creates_configured_backup_dir_when_cli_default_missing(self, mock_convert, tmp_path):
+    def test_creates_configured_backup_dir_when_cli_default_missing(
+        self, mock_convert, tmp_path, monkeypatch
+    ):
         from src.commands.convert_command import run_convert_command
+
+        # Change to tmp_path so ./remarkable_backup doesn't exist
+        monkeypatch.chdir(tmp_path)
 
         mock_convert.return_value = (True, {}, [])
         configured_backup = tmp_path / "configured_backup"

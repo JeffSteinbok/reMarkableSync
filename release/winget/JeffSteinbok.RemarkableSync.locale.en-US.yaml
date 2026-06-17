@@ -1,13 +1,13 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.9.0
-PackageIdentifier: JeffSteinbok.RemarkableSync
+PackageIdentifier: JeffSteinbok.reMarkableSync
 PackageVersion: 2.0.4
 PackageLocale: en-US
 Publisher: JeffSteinbok
 PublisherUrl: https://github.com/JeffSteinbok
-PackageName: RemarkableSync
-PackageUrl: https://github.com/JeffSteinbok/RemarkableSync
+PackageName: reMarkableSync
+PackageUrl: https://github.com/JeffSteinbok/reMarkableSync
 License: MIT
-LicenseUrl: https://github.com/JeffSteinbok/RemarkableSync/blob/main/LICENSE
+LicenseUrl: https://github.com/JeffSteinbok/reMarkableSync/blob/main/LICENSE
 ShortDescription: Sync reMarkable tablet notebooks to PDF and Markdown via USB or Wi-Fi
 Description: |-
   A comprehensive Python toolkit for backing up reMarkable tablet notebooks,

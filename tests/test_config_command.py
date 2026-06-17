@@ -95,20 +95,20 @@ def test_run_config_command_without_ocr_preserves_embed_images():
 
 
 def test_main_without_config_requires_running_config_first(capsys, tmp_path):
-    import RemarkableSync
+    import reMarkableSync
 
     missing = tmp_path / "remarkablesync" / "config.json"
 
     with (
         patch("src.config.get_config_path", return_value=missing),
-        patch.object(sys, "argv", ["RemarkableSync.py"]),
-        patch.object(RemarkableSync, "cli") as mock_cli,
+        patch.object(sys, "argv", ["reMarkableSync.py"]),
+        patch.object(reMarkableSync, "cli") as mock_cli,
         pytest.raises(SystemExit) as raised,
     ):
-        RemarkableSync.main()
+        reMarkableSync.main()
 
     assert raised.value.code == 1
     err = capsys.readouterr().err
     assert "No configuration found." in err
-    assert "Run: python RemarkableSync.py config" in err
+    assert "Run: python reMarkableSync.py config" in err
     mock_cli.assert_not_called()

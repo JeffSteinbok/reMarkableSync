@@ -31,13 +31,13 @@ setup(
     url="https://github.com/JeffSteinbok/RemarkableSync",
     license="MIT",
     packages=find_packages(exclude=["tests", "tests.*", "release"]),
-    py_modules=["RemarkableSync"],
+    py_modules=["reMarkableSync"],
     include_package_data=True,
     install_requires=requirements,
     python_requires=">=3.11",
     entry_points={
         "console_scripts": [
-            "RemarkableSync=RemarkableSync:main",
+            "reMarkableSync=reMarkableSync:main",
         ],
     },
     classifiers=[

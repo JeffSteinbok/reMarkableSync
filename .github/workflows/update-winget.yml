@@ -17,13 +17,13 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ github.event.release.tag_name }}".TrimStart("v")
-          $url = "https://github.com/${{ github.repository }}/releases/download/${{ github.event.release.tag_name }}/RemarkableSync-Windows.zip"
+          $url = "https://github.com/${{ github.repository }}/releases/download/${{ github.event.release.tag_name }}/reMarkableSync-Windows.zip"
           echo "version=$version" >> $env:GITHUB_OUTPUT
           echo "url=$url" >> $env:GITHUB_OUTPUT
 
       - name: Update winget manifest
         run: |
-          .\wingetcreate.exe update JeffSteinbok.RemarkableSync `
+          .\wingetcreate.exe update JeffSteinbok.reMarkableSync `
             --urls "${{ steps.release.outputs.url }}" `
             --version "${{ steps.release.outputs.version }}" `
             --submit `

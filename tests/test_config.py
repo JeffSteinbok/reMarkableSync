@@ -119,6 +119,7 @@ class TestConfigModule:
             "ai_provider": "github",
             "embed_images": True,
             "ai_model": "",
+            "ocr_custom_instructions": "",
             "pre_sync_command": "",
             "post_sync_command": "",
         }

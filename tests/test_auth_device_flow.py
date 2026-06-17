@@ -35,7 +35,7 @@ class TestRequestDeviceCode:
 
         mock_post.assert_called_once_with(
             DEVICE_CODE_URL,
-            data={"client_id": CLIENT_ID, "scope": ""},
+            data={"client_id": CLIENT_ID, "scope": "read:user"},
             headers={"Accept": "application/json"},
         )
         assert result["device_code"] == "dc-123"

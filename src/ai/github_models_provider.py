@@ -25,26 +25,33 @@ from .base_provider import (
 
 
 class GitHubModelsProvider(BaseAIProvider):
-    """AI provider using the GitHub Models / OpenAI-compatible inference API."""
+    """AI provider using the GitHub Copilot API.
 
-    GITHUB_MODELS_ENDPOINT = "https://models.inference.ai.azure.com"
-    DEFAULT_MODEL = "gpt-4o-mini"
+    Uses the GitHub Copilot endpoint which supports GPT-4o, Claude, Gemini,
+    and other models via an OpenAI-compatible interface.
+    """
+
+    GITHUB_COPILOT_ENDPOINT = "https://api.githubcopilot.com"
+    # Legacy endpoints (kept for reference)
+    GITHUB_MODELS_ENDPOINT = "https://models.github.ai/inference"
+    LEGACY_AZURE_ENDPOINT = "https://models.inference.ai.azure.com"
+    DEFAULT_MODEL = "gpt-4o"
 
     def __init__(self, api_key: str = "", model: str = "", endpoint: str = ""):
-        """Initialise the GitHub Models provider.
+        """Initialise the GitHub Copilot provider.
 
         Args:
-            api_key: GitHub PAT or OpenAI API key.  Falls back to the
-                ``GITHUB_TOKEN`` env-var then ``OPENAI_API_KEY``.
-            model: Model identifier.  Defaults to ``gpt-4o``.
-            endpoint: Base URL for the inference endpoint.  Defaults to the
-                GitHub Models endpoint.
+            api_key: GitHub PAT or OAuth token. Falls back to the
+                ``GITHUB_TOKEN`` env-var.
+            model: Model identifier. Defaults to ``gpt-4o``.
+            endpoint: Base URL for the inference endpoint. Defaults to the
+                GitHub Copilot endpoint.
         """
         self.api_key = (
             api_key or os.environ.get("GITHUB_TOKEN", "") or os.environ.get("OPENAI_API_KEY", "")
         )
         self.model = model or self.DEFAULT_MODEL
-        self.endpoint = endpoint or self.GITHUB_MODELS_ENDPOINT
+        self.endpoint = endpoint or self.GITHUB_COPILOT_ENDPOINT
         self._client = None
         self._init_client()
 
@@ -58,7 +65,11 @@ class GitHubModelsProvider(BaseAIProvider):
         try:
             from openai import OpenAI  # type: ignore
 
-            self._client = OpenAI(base_url=self.endpoint, api_key=self.api_key)
+            self._client = OpenAI(
+                base_url=self.endpoint,
+                api_key=self.api_key,
+                default_headers={"Copilot-Integration-Id": "vscode-chat"},
+            )
         except ImportError:
             logging.warning("openai package not installed – run: pip install openai")
 
@@ -104,11 +115,11 @@ class GitHubModelsProvider(BaseAIProvider):
             )
             return response.choices[0].message.content or ""
         except Exception as exc:  # noqa: BLE001
-            logging.error("GitHub Models transcription error: %s", exc)
+            logging.debug("GitHub Copilot transcription error: %s", exc)
             retry = _parse_retry_after(exc)
             if retry is not None:
                 raise AIRateLimitError(str(exc), retry_after=retry) from exc
-            raise AIProviderError(f"GitHub Models transcription failed: {exc}") from exc
+            raise AIProviderError(f"GitHub Copilot transcription failed: {exc}") from exc
 
     def cleanup_text(self, raw_text: str, context: str = "") -> str:
         """Ask the model to clean up and structure raw transcribed text."""

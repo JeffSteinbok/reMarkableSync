@@ -51,6 +51,24 @@ CLEANUP_PROMPT = (
 )
 
 
+def get_transcription_prompt() -> str:
+    """Get the full transcription prompt, including any custom instructions.
+
+    Loads custom instructions from the user's config directory and appends
+    them to the base transcription prompt.
+
+    Returns:
+        The complete transcription prompt.
+    """
+    from src.config import load_custom_instructions
+
+    prompt = TRANSCRIPTION_PROMPT
+    custom = load_custom_instructions()
+    if custom:
+        prompt += f"\n\nAdditional instructions:\n{custom}"
+    return prompt
+
+
 class BaseAIProvider(ABC):
     """Abstract base for all AI LLM / vision providers."""
 

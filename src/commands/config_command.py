@@ -13,8 +13,89 @@ from src.config import SYNC_ACTIONS, load_config, save_config
 from src.utils.console import print_warn
 
 
-def run_config_command() -> int:
-    """Run the interactive configuration wizard."""
+def _print_status_message(message: str, success: bool = True) -> None:
+    """Print a styled status message (success or abort)."""
+    from rich.console import Console
+    from rich.panel import Panel
+
+    console = Console(highlight=False)
+    style = "green" if success else "yellow"
+    console.print()
+    console.print(Panel(message, border_style=style, expand=False))
+    console.print()
+
+
+def print_config_summary(cfg: dict, config_path=None) -> None:
+    """Print a formatted config summary with aligned labels and clickable paths."""
+    from rich.console import Console
+    from rich.text import Text
+
+    from src.config import load_custom_instructions
+
+    console = Console(highlight=False)
+
+    def _path_link(p: str) -> Text:
+        """Create a clickable path link."""
+        t = Text()
+        t.append(str(p), style=f"link file://{p}")
+        return t
+
+    def _row(label: str, value) -> None:
+        """Print a row with consistent spacing (10 char label width)."""
+        console.print(f"  {label:<10} {value}")
+
+    def _row_path(label: str, path: str) -> None:
+        """Print a row with a clickable path."""
+        console.print(Text(f"  {label:<10} ") + _path_link(path))
+
+    console.print()
+    if config_path:
+        _row_path("File:", str(config_path))
+    _row("Mode:", cfg.get("connection_mode", "usb").upper())
+    if cfg.get("connection_mode") == "wifi":
+        _row("Host:", cfg.get("wifi_host", "(not set)"))
+    _row("Password:", "••••••••" if cfg.get("password") else "(not set)")
+    if cfg.get("backup_dir"):
+        _row_path("Backup:", cfg.get("backup_dir"))
+    if cfg.get("pdf_dir"):
+        _row_path("PDFs:", cfg.get("pdf_dir"))
+    folders = cfg.get("folders", [])
+    _row("Folders:", ", ".join(folders) if folders else "(all)")
+    actions = cfg.get("sync_actions", [])
+    _row("Actions:", ", ".join(actions))
+    if cfg.get("ocr_enabled"):
+        if cfg.get("output_dir"):
+            _row_path("Markdown:", cfg.get("output_dir"))
+        _row("Images:", "yes (_images/ folder)" if cfg.get("embed_images") else "no")
+        _row("AI:", f"{cfg.get('ai_provider', 'github')} ({cfg.get('ai_model', '')})")
+        # Show custom instructions status
+        custom_path = cfg.get("ocr_custom_instructions", "")
+        custom_text = load_custom_instructions()
+        if custom_path:
+            _row_path("Custom:", custom_path)
+        elif custom_text:
+            _row("Custom:", "(using default location)")
+        else:
+            _row("Custom:", "(none)")
+    if cfg.get("pre_sync_command"):
+        _row("Pre:", cfg.get("pre_sync_command"))
+    if cfg.get("post_sync_command"):
+        _row("Post:", cfg.get("post_sync_command"))
+    console.print()
+
+
+def run_config_command(log_level: str = "NONE") -> int:
+    """Run the interactive configuration wizard.
+
+    Args:
+        log_level: Log verbosity level (DBG, INF, WRN, ERR, NONE).
+    """
+    from src.config import get_config_dir
+    from src.utils.logging import setup_logging
+
+    log_dir = get_config_dir()
+    setup_logging(log_level, log_dir=log_dir)
+
     try:
         from InquirerPy import inquirer
         from InquirerPy.separator import Separator  # noqa: F401
@@ -25,11 +106,26 @@ def run_config_command() -> int:
 
     current = load_config()
 
-    click.echo("=" * 70)
-    click.echo("  RemarkableSync Configuration Wizard")
-    click.echo("=" * 70)
+    from rich.console import Console
+    from rich.rule import Rule
+
+    console = Console(highlight=False)
+    console.print()
+    console.print(Rule("[bold]Configuration Wizard[/bold]", style="dim"))
+    click.echo()
+    click.secho("  This wizard will guide you through the setup process.", fg="yellow")
+    click.secho("  Press Ctrl+C at any time to abort without saving changes.", fg="yellow")
     click.echo()
 
+    try:
+        return _run_wizard(current, inquirer)
+    except KeyboardInterrupt:
+        _print_status_message("Aborted. No changes saved.", success=False)
+        return 0
+
+
+def _run_wizard(current, inquirer) -> int:
+    """Internal wizard logic."""
     # 1. Connection Mode
     connection_mode = inquirer.select(
         message="Connection mode:",
@@ -41,7 +137,7 @@ def run_config_command() -> int:
     ).execute()
 
     if connection_mode is None:
-        click.echo("Configuration cancelled.")
+        _print_status_message("Aborted. No changes saved.", success=False)
         return 0
 
     # 2. WiFi Host (only if WiFi mode selected)
@@ -85,22 +181,22 @@ def run_config_command() -> int:
                     if not wifi_host:
                         click.echo()
                         click.echo("  Could not enable WiFi SSH automatically.")
-                        click.echo("  To enable it manually:")
-                        click.echo("    1. Connect tablet via USB")
-                        click.echo("    2. SSH into 10.11.99.1")
-                        click.echo("    3. Run: rm-ssh-over-wlan on")
-                        click.echo("    4. Find IP: ip addr show wlan0")
-                        click.echo("    5. Re-run this wizard")
+                        click.secho("  To enable it manually:", fg="yellow")
+                        click.secho("    1. Connect tablet via USB", fg="yellow")
+                        click.secho("    2. SSH into 10.11.99.1", fg="yellow")
+                        click.secho("    3. Run: rm-ssh-over-wlan on", fg="yellow")
+                        click.secho("    4. Find IP: ip addr show wlan0", fg="yellow")
+                        click.secho("    5. Re-run this wizard", fg="yellow")
                         return 1
             else:
                 click.echo()
-                click.echo("  To enable WiFi SSH on your reMarkable:")
-                click.echo("    1. Connect tablet to your computer via USB")
-                click.echo("    2. SSH into 10.11.99.1 (password on tablet:")
-                click.echo("       Settings > Help > Copyright and licenses)")
-                click.echo("    3. Run: rm-ssh-over-wlan on")
-                click.echo("    4. Note the WiFi IP: ip addr show wlan0")
-                click.echo("    5. Re-run this wizard with the IP ready")
+                click.secho("  To enable WiFi SSH on your reMarkable:", fg="yellow")
+                click.secho("    1. Connect tablet to your computer via USB", fg="yellow")
+                click.secho("    2. SSH into 10.11.99.1 (password on tablet:", fg="yellow")
+                click.secho("       Settings > Help > Copyright and licenses)", fg="yellow")
+                click.secho("    3. Run: rm-ssh-over-wlan on", fg="yellow")
+                click.secho("    4. Note the WiFi IP: ip addr show wlan0", fg="yellow")
+                click.secho("    5. Re-run this wizard with the IP ready", fg="yellow")
                 return 1
 
         # Let user confirm/change the IP (pre-filled from device or config; blank if unknown)
@@ -111,7 +207,7 @@ def run_config_command() -> int:
         ).execute()
 
         if wifi_host is None:
-            click.echo("Configuration cancelled.")
+            _print_status_message("Aborted. No changes saved.", success=False)
             return 0
 
     # 3. Password
@@ -128,7 +224,7 @@ def run_config_command() -> int:
                 transformer=lambda _: "********" if _ else "(empty)",
             ).execute()
             if password is None:
-                click.echo("Configuration cancelled.")
+                _print_status_message("Aborted. No changes saved.", success=False)
                 return 0
             _offer_keyring_save(password)
         else:
@@ -140,7 +236,7 @@ def run_config_command() -> int:
             transformer=lambda _: "********" if _ else "(empty)",
         ).execute()
         if password is None:
-            click.echo("Configuration cancelled.")
+            _print_status_message("Aborted. No changes saved.", success=False)
             return 0
         if password:
             _offer_keyring_save(password)
@@ -156,7 +252,7 @@ def run_config_command() -> int:
     ).execute()
 
     if backup_dir is None:
-        click.echo("Configuration cancelled.")
+        _print_status_message("Aborted. No changes saved.", success=False)
         return 0
     if not backup_dir.strip():
         backup_dir = _default_backup_dir()
@@ -186,7 +282,7 @@ def run_config_command() -> int:
     ).execute()
 
     if chosen is None:
-        click.echo("Configuration cancelled.")
+        _print_status_message("Aborted. No changes saved.", success=False)
         return 0
 
     # Cascade: all steps up to and including the chosen step
@@ -206,19 +302,18 @@ def run_config_command() -> int:
         ).execute()
 
         if pdf_dir is None:
-            click.echo("Configuration cancelled.")
+            _print_status_message("Aborted. No changes saved.", success=False)
             return 0
         if not pdf_dir.strip():
             pdf_dir = str(docs / "RemarkableSync" / "PDF")
             click.echo(f"  Using default: {pdf_dir}")
 
     # 7. Markdown export settings — OCR is implied when export is selected
-    ocr_enabled = current.get("ocr_enabled", False)
+    ocr_enabled = "ocr" in sync_actions
     output_dir = current.get("output_dir", "")
     embed_images = current.get("embed_images", True)
 
-    if "ocr" in sync_actions:
-        ocr_enabled = True
+    if ocr_enabled:
         default_output_dir = output_dir or str(docs / "RemarkableSync" / "Markdown")
         output_dir = inquirer.text(
             message="Markdown output directory (blank=default):",
@@ -226,7 +321,7 @@ def run_config_command() -> int:
         ).execute()
 
         if output_dir is None:
-            click.echo("Configuration cancelled.")
+            _print_status_message("Aborted. No changes saved.", success=False)
             return 0
         if not output_dir.strip():
             output_dir = str(docs / "RemarkableSync" / "Markdown")
@@ -239,12 +334,15 @@ def run_config_command() -> int:
         ).execute()
 
         if embed_images is None:
-            click.echo("Configuration cancelled.")
+            _print_status_message("Aborted. No changes saved.", success=False)
             return 0
 
     # 7. AI provider selection (only if OCR is enabled)
     ai_provider = current.get("ai_provider", "github")
     ai_model = current.get("ai_model", "")
+    github_token = ""
+    claude_api_key = ""
+
     if ocr_enabled:
         ai_provider = inquirer.select(
             message="AI provider for handwriting recognition:",
@@ -256,69 +354,105 @@ def run_config_command() -> int:
         ).execute()
 
         if ai_provider is None:
-            click.echo("Configuration cancelled.")
+            _print_status_message("Aborted. No changes saved.", success=False)
             return 0
 
-        # Model selection
+        # Authenticate first so we can fetch models
         if ai_provider == "github":
-            default_model = ai_model if ai_model else "gpt-4o-mini"
-            ai_model = (
-                inquirer.text(
-                    message="GitHub Models model:",
-                    default=default_model,
+            from src.keyring_store import KEY_GITHUB_TOKEN, get_secret, set_secret
+
+            existing = get_secret(KEY_GITHUB_TOKEN)
+            if existing:
+                click.echo("  GitHub token: (saved in keyring)")
+                change = inquirer.confirm(
+                    message="Re-authenticate with GitHub?",
+                    default=False,
                 ).execute()
-                or default_model
-            )
-        elif ai_provider == "claude":
-            default_model = ai_model if ai_model else "claude-sonnet-4-6"
-            ai_model = (
-                inquirer.text(
-                    message="Claude model:",
-                    default=default_model,
-                ).execute()
-                or default_model
-            )
-
-    # 8. AI token (only if OCR enabled)
-    github_token = ""
-    claude_api_key = ""
-
-    if ocr_enabled and ai_provider == "github":
-        from src.keyring_store import KEY_GITHUB_TOKEN, get_secret, set_secret
-
-        existing = get_secret(KEY_GITHUB_TOKEN)
-        if existing:
-            click.echo("  GitHub token: (saved in keyring)")
-            change = inquirer.confirm(
-                message="Re-authenticate with GitHub?",
-                default=False,
-            ).execute()
-            if change:
+                if change:
+                    github_token = _run_device_flow()
+                    if github_token:
+                        set_secret(KEY_GITHUB_TOKEN, github_token)
+                else:
+                    github_token = existing
+            else:
+                click.echo()
+                click.secho("  GitHub authentication required for AI OCR.", fg="yellow")
                 github_token = _run_device_flow()
                 if github_token:
                     set_secret(KEY_GITHUB_TOKEN, github_token)
-            else:
-                github_token = existing
-        else:
-            click.echo()
-            click.echo("  GitHub authentication required for AI OCR.")
-            github_token = _run_device_flow()
-            if github_token:
-                set_secret(KEY_GITHUB_TOKEN, github_token)
-            else:
-                click.echo("  Authentication skipped. You can set GITHUB_TOKEN env var instead.")
+                else:
+                    click.echo(
+                        "  Authentication skipped. You can set GITHUB_TOKEN env var instead."
+                    )
 
-    elif ocr_enabled and ai_provider == "claude":
-        from src.keyring_store import KEY_CLAUDE_API_KEY, get_secret, set_secret
+            # Model selection for GitHub - fetch available models
+            from src.ai.github_copilot_provider import get_available_models
 
-        existing = get_secret(KEY_CLAUDE_API_KEY)
-        if existing:
-            click.echo("  Claude API key: (saved in keyring)")
-            change = inquirer.confirm(
-                message="Change Claude API key?",
-                default=False,
-            ).execute()
-            if change:
+            default_model = ai_model if ai_model else "gpt-5-mini"
+            models = get_available_models(github_token, vision_only=True) if github_token else []
+
+            if models:
+                # Build choices list
+                model_choices = [
+                    {"name": display, "value": model_id} for model_id, display in models
+                ]
+                # Find default in list
+                default_idx = next(
+                    (i for i, (mid, _) in enumerate(models) if mid == default_model), 0
+                )
+                ai_model = (
+                    inquirer.select(
+                        message="GitHub Models model:",
+                        choices=model_choices,
+                        default=(
+                            model_choices[default_idx]["value"] if model_choices else default_model
+                        ),
+                    ).execute()
+                    or default_model
+                )
+            else:
+                # Fallback to text input if can't fetch models
+                ai_model = (
+                    inquirer.text(
+                        message="GitHub Models model:",
+                        default=default_model,
+                    ).execute()
+                    or default_model
+                )
+
+        elif ai_provider == "claude":
+            from src.keyring_store import KEY_CLAUDE_API_KEY, get_secret, set_secret
+
+            existing = get_secret(KEY_CLAUDE_API_KEY)
+            if existing:
+                click.echo("  Claude API key: (saved in keyring)")
+                change = inquirer.confirm(
+                    message="Change Claude API key?",
+                    default=False,
+                ).execute()
+                if change:
+                    claude_api_key = (
+                        inquirer.secret(
+                            message="Anthropic API key:",
+                            transformer=lambda _: "••••••••" if _ else "(empty)",
+                        ).execute()
+                        or ""
+                    )
+                    if claude_api_key:
+                        set_secret(KEY_CLAUDE_API_KEY, claude_api_key)
+                else:
+                    claude_api_key = existing
+            else:
+                click.echo()
+                click.secho("  To use Claude for handwriting recognition you need an", fg="yellow")
+                click.secho("  Anthropic API key:", fg="yellow")
+                click.echo()
+                click.secho("  1. Go to  https://console.anthropic.com/settings/keys", fg="yellow")
+                click.secho("  2. Click 'Create Key' and give it a name", fg="yellow")
+                click.secho("  3. Copy the key (starts with sk-ant-...)", fg="yellow")
+                click.secho("  4. Paste it below — it will be stored securely in", fg="yellow")
+                click.secho("     your system keyring (never written to config files)", fg="yellow")
+                click.echo()
                 claude_api_key = (
                     inquirer.secret(
                         message="Anthropic API key:",
@@ -328,38 +462,50 @@ def run_config_command() -> int:
                 )
                 if claude_api_key:
                     set_secret(KEY_CLAUDE_API_KEY, claude_api_key)
-            else:
-                claude_api_key = existing
-        else:
-            click.echo()
-            click.echo("  To use Claude for handwriting recognition you need an")
-            click.echo("  Anthropic API key:")
-            click.echo()
-            click.echo("  1. Go to  https://console.anthropic.com/settings/keys")
-            click.echo("  2. Click 'Create Key' and give it a name")
-            click.echo("  3. Copy the key (starts with sk-ant-...)")
-            click.echo("  4. Paste it below — it will be stored securely in")
-            click.echo("     your system keyring (never written to config files)")
-            click.echo()
-            claude_api_key = (
-                inquirer.secret(
-                    message="Anthropic API key:",
-                    transformer=lambda _: "••••••••" if _ else "(empty)",
-                ).execute()
-                or ""
-            )
-            if claude_api_key:
-                set_secret(KEY_CLAUDE_API_KEY, claude_api_key)
-            else:
-                click.echo("  Skipped. You can set ANTHROPIC_API_KEY env var instead.")
+                else:
+                    click.echo("  Skipped. You can set ANTHROPIC_API_KEY env var instead.")
 
-    # 8. Pre/post-sync commands (optional)
+            # Model selection for Claude
+            default_model = ai_model if ai_model else "claude-sonnet-4-6"
+            ai_model = (
+                inquirer.text(
+                    message="Claude model:",
+                    default=default_model,
+                ).execute()
+                or default_model
+            )
+
+    # 8a. Custom OCR instructions (optional)
+    ocr_custom_instructions = ""
+    if ocr_enabled:
+        from src.config import get_custom_instructions_path
+
+        default_instructions_path = get_custom_instructions_path()
+        current_instructions = current.get("ocr_custom_instructions", "")
+
+        click.echo()
+        click.secho("  Optional: custom instructions for OCR transcription.", fg="yellow")
+        click.secho(f"  Default location: {default_instructions_path}", fg="yellow")
+        click.secho("  Leave blank to use default location (if file exists).", fg="yellow")
+        click.echo()
+
+        ocr_custom_instructions = (
+            inquirer.text(
+                message="Custom instructions file (blank=default):",
+                default=current_instructions,
+            ).execute()
+            or ""
+        )
+
+    # 8b. Pre/post-sync commands (optional)
     pre_sync_command = current.get("pre_sync_command", "")
     post_sync_command = current.get("post_sync_command", "")
 
     click.echo()
-    click.echo("  Optional: shell commands to run before and after sync.")
-    click.echo("  Useful for disabling VPNs, network tools, etc. Leave blank to skip.")
+    click.secho("  Optional: shell commands to run before and after sync.", fg="yellow")
+    click.secho(
+        "  Useful for disabling VPNs, network tools, etc. Leave blank to skip.", fg="yellow"
+    )
     click.echo()
 
     pre_sync_command = (
@@ -404,7 +550,7 @@ def run_config_command() -> int:
         ).execute()
 
         if folders is None:
-            click.echo("Configuration cancelled.")
+            _print_status_message("Aborted. No changes saved.", success=False)
             return 0
     else:
         print_warn("  WRN - Could not connect to tablet. Folder selection skipped.")
@@ -426,6 +572,7 @@ def run_config_command() -> int:
             "embed_images": embed_images,
             "ai_provider": ai_provider,
             "ai_model": ai_model,
+            "ocr_custom_instructions": ocr_custom_instructions,
             "pre_sync_command": pre_sync_command,
             "post_sync_command": post_sync_command,
         }
@@ -433,27 +580,45 @@ def run_config_command() -> int:
 
     path = save_config(config)
 
-    click.echo()
-    click.echo("=" * 70)
-    click.echo("  Configuration saved!")
-    click.echo("=" * 70)
-    click.echo()
-    click.echo(f"  File:      {path}")
-    click.echo(f"  Mode:      {connection_mode.upper()}")
+    _print_status_message("Configuration saved!")
+
+    from rich.console import Console
+    from rich.text import Text
+
+    console = Console(highlight=False)
+
+    def _path_link(p: str) -> Text:
+        """Create a clickable path link."""
+        t = Text()
+        t.append(p, style=f"link file://{p}")
+        return t
+
+    console.print(Text("  File:       ") + _path_link(str(path)))
+    click.echo(f"  Mode:       {connection_mode.upper()}")
     if connection_mode == "wifi":
-        click.echo(f"  Host:      {wifi_host}")
-    click.echo(f"  Password:  {'••••••••' if password else '(not set)'}")
-    click.echo(f"  Backup:    {backup_dir}")
+        click.echo(f"  Host:       {wifi_host}")
+    click.echo(f"  Password:   {'••••••••' if password else '(not set)'}")
+    console.print(Text("  Backup:     ") + _path_link(backup_dir))
     if pdf_dir:
-        click.echo(f"  PDFs:      {pdf_dir}")
-    click.echo(f"  Folders:   {', '.join(folders) if folders else '(all)'}")
-    click.echo(f"  Actions:   {', '.join(sync_actions)}")
+        console.print(Text("  PDFs:       ") + _path_link(pdf_dir))
+    click.echo(f"  Folders:    {', '.join(folders) if folders else '(all)'}")
+    click.echo(f"  Actions:    {', '.join(sync_actions)}")
     if ocr_enabled:
-        click.echo(f"  MD:        {output_dir}")
-        click.echo(f"  Images:    {'yes (_images/ folder)' if embed_images else 'no'}")
-        click.echo(f"  AI:        {ai_provider} ({ai_model})")
+        console.print(Text("  Markdown:   ") + _path_link(output_dir))
+        click.echo(f"  Images:     {'yes (_images/ folder)' if embed_images else 'no'}")
+        click.echo(f"  AI:         {ai_provider} ({ai_model})")
         has_token = bool(github_token or claude_api_key)
-        click.echo(f"  Token:     {'OK - saved in keyring' if has_token else '(not set)'}")
+        click.echo(f"  Token:      {'OK - saved in keyring' if has_token else '(not set)'}")
+        # Show custom instructions status
+        from src.config import load_custom_instructions
+
+        custom_text = load_custom_instructions()
+        if ocr_custom_instructions:
+            console.print(Text("  Custom:     ") + _path_link(ocr_custom_instructions))
+        elif custom_text:
+            click.echo("  Custom:     (using default location)")
+        else:
+            click.echo("  Custom:     (none)")
     if pre_sync_command:
         click.echo(f"  Pre:       {pre_sync_command}")
     if post_sync_command:
@@ -664,13 +829,19 @@ def _run_device_flow() -> str:
         except Exception:
             copied = ""
 
-        click.echo("  +-------------------------------------------+")
-        click.echo(f"  |  Visit: {uri:<30}  |")
-        click.echo(f"  |  Enter code: {code:<26}  |")
-        click.echo("  +-------------------------------------------+")
-        click.echo(f"  Code{copied}")
+        from rich.console import Console
+        from rich.panel import Panel
+        from rich.text import Text
+
+        console = Console(highlight=False)
+        content = Text()
+        content.append("Visit: ", style="bold")
+        content.append(uri, style="bold link " + uri)
+        content.append(f"\nEnter code: {code}{copied}", style="bold cyan")
+        console.print()
+        console.print(Panel(content, title="GitHub Authorization", border_style="cyan"))
         click.echo()
-        click.echo("  Waiting for authorization...", nl=False)
+        click.secho("  Waiting for authorization...", fg="yellow", nl=False)
 
     try:
         token, error = device_flow_authenticate(on_code_received=on_code)

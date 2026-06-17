@@ -1,7 +1,7 @@
 """
 GitHub OAuth Device Code Flow for obtaining a GitHub token.
 
-Used by RemarkableSync to authenticate with GitHub Models for AI OCR.
+Used by RemarkableSync to authenticate with GitHub Copilot API for AI OCR.
 No client secret is needed — only the public Client ID.
 """
 
@@ -10,14 +10,25 @@ from typing import Optional, Tuple
 
 import requests
 
-# OAuth App Client ID for RemarkableSync (device flow — no secret needed)
-CLIENT_ID = "Ov23linXELxwaOh05sch"
+# GitHub Copilot OAuth App Client ID (same as VS Code / Neovim plugins)
+# This is required to exchange for Copilot API tokens
+CLIENT_ID = "Iv1.b507a08c87ecfe98"
 
 DEVICE_CODE_URL = "https://github.com/login/device/code"
 TOKEN_URL = "https://github.com/login/oauth/access_token"
-# GitHub Models access is granted by the token itself (no special scope needed).
-# We request no scopes — the OAuth token works for Models inference.
-SCOPE = ""
+# Copilot requires read:user scope for token exchange
+SCOPE = "read:user"
+
+# Copilot API token exchange
+COPILOT_TOKEN_URL = "https://api.github.com/copilot_internal/v2/token"
+COPILOT_HEADERS = {
+    "Accept": "application/json",
+    "Copilot-Integration-Id": "vscode-chat",
+    "Editor-Version": "vscode/1.107.0",
+    "Editor-Plugin-Version": "copilot-chat/0.35.0",
+    "User-Agent": "GitHubCopilotChat/0.35.0",
+    "X-Github-Api-Version": "2025-04-01",
+}
 
 
 def request_device_code() -> dict:
@@ -80,6 +91,38 @@ def poll_for_token(
 
         if time.time() - start > expires_in:
             return None, "Timed out waiting for authorization."
+
+
+def exchange_for_copilot_token(github_token: str) -> Tuple[Optional[str], Optional[str]]:
+    """Exchange a GitHub OAuth token for a short-lived Copilot API token.
+
+    Args:
+        github_token: GitHub OAuth token from device flow (must be from Copilot client ID)
+
+    Returns:
+        Tuple of (copilot_token, error_message). One will be None.
+    """
+    headers = {
+        **COPILOT_HEADERS,
+        "Authorization": f"Bearer {github_token}",
+    }
+    try:
+        resp = requests.get(COPILOT_TOKEN_URL, headers=headers)
+        if resp.status_code == 404:
+            return None, "Copilot API not available. Do you have a Copilot subscription?"
+        if resp.status_code == 401:
+            return None, "GitHub token invalid or expired. Please re-authenticate."
+        if resp.status_code == 403:
+            return None, "Token not authorized for Copilot. Re-run config to get a new token."
+        resp.raise_for_status()
+
+        data = resp.json()
+        token = data.get("token")
+        if not token:
+            return None, f"No token in response: {data}"
+        return token, None
+    except requests.RequestException as exc:
+        return None, f"Request failed: {exc}"
 
 
 def device_flow_authenticate(on_code_received=None) -> Tuple[Optional[str], Optional[str]]:
