@@ -969,16 +969,10 @@ def _detach_watch():
     """Re-launch this script as a detached background process."""
     import subprocess as sp
 
-    script = Path(sys.argv[0]).resolve()
+    from src.commands.watch_command import _build_watch_launch_args
 
     if sys.platform == "win32":
-        # Use pythonw.exe to avoid any console windows
-        exe = Path(sys.executable)
-        pythonw = exe.parent / "pythonw.exe"
-        if not pythonw.exists():
-            pythonw = exe  # fallback
-
-        args = [str(pythonw), str(script), "watch", "--foreground"]
+        args = _build_watch_launch_args()
         DETACHED_PROCESS = 0x00000008
         CREATE_NO_WINDOW = 0x08000000
         sp.Popen(
@@ -989,7 +983,7 @@ def _detach_watch():
             stderr=sp.DEVNULL,
         )
     else:
-        args = [sys.executable, str(script), "watch", "--foreground"]
+        args = _build_watch_launch_args()
         sp.Popen(
             args,
             start_new_session=True,

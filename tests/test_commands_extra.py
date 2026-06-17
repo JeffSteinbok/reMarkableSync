@@ -6,6 +6,7 @@ communication) are mocked.
 """
 
 import json
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -474,6 +475,67 @@ class TestBackupManager:
 
         assert result is True
         assert mock_run_conversion.called
+
+
+# ---------------------------------------------------------------------------
+# watch_command — launch args
+# ---------------------------------------------------------------------------
+
+
+class TestWatchLaunchArgs:
+    """Tests for watch background-launch command construction."""
+
+    def test_script_entrypoint_launches_script_directly(self, monkeypatch, tmp_path):
+        """A real .py entrypoint can be launched directly."""
+        from src.commands import watch_command
+
+        script = tmp_path / "reMarkableSync.py"
+        script.write_text("print('ok')", encoding="utf-8")
+
+        monkeypatch.setattr(sys, "argv", [str(script)])
+        monkeypatch.setattr(sys, "executable", str(tmp_path / "python.exe"))
+        monkeypatch.setattr(watch_command.sys, "platform", "win32")
+
+        args = watch_command._build_watch_launch_args()
+
+        assert args == [str(tmp_path / "python.exe"), str(script), "watch", "--foreground"]
+
+    def test_console_launcher_uses_module_mode(self, monkeypatch, tmp_path):
+        """Installed console-script .exe launchers must be invoked via -m."""
+        from src.commands import watch_command
+
+        launcher = tmp_path / "reMarkableSync.exe"
+        launcher.write_text("", encoding="utf-8")
+
+        monkeypatch.setattr(sys, "argv", [str(launcher)])
+        monkeypatch.setattr(sys, "executable", str(tmp_path / "python.exe"))
+        monkeypatch.setattr(watch_command.sys, "platform", "win32")
+
+        args = watch_command._build_watch_launch_args()
+
+        assert args == [
+            str(tmp_path / "python.exe"),
+            "-m",
+            "reMarkableSync",
+            "watch",
+            "--foreground",
+        ]
+
+    def test_get_watch_command_line_quotes_module_launch(self, monkeypatch, tmp_path):
+        """Startup command line should use the same safe launch path."""
+        from src.commands import watch_command
+
+        launcher = tmp_path / "Scripts" / "reMarkableSync.exe"
+        python = tmp_path / "Python 313" / "python.exe"
+
+        monkeypatch.setattr(sys, "argv", [str(launcher)])
+        monkeypatch.setattr(sys, "executable", str(python))
+        monkeypatch.setattr(watch_command.sys, "platform", "win32")
+
+        cmd_line = watch_command._get_watch_command_line()
+
+        assert "-m reMarkableSync watch --foreground" in cmd_line
+        assert str(python) in cmd_line
 
 
 # ---------------------------------------------------------------------------

@@ -35,6 +35,7 @@ INTERVAL_CHOICES = [
 # Registry key for Windows startup
 _STARTUP_REG_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 _STARTUP_REG_NAME = "reMarkableSync"
+_CLI_MODULE = "reMarkableSync"
 
 
 # ---------------------------------------------------------------------------
@@ -96,10 +97,38 @@ class FileLock:
 # ---------------------------------------------------------------------------
 
 
-def _get_watch_command_line() -> str:
-    """Build the command line that would re-launch watch mode."""
+def _pythonw_executable() -> Path:
+    """Return pythonw.exe on Windows when available, otherwise sys.executable."""
+    exe = Path(sys.executable)
+    if sys.platform != "win32":
+        return exe
+
+    pythonw = exe.parent / "pythonw.exe"
+    return pythonw if pythonw.exists() else exe
+
+
+def _build_watch_launch_args() -> list[str]:
+    """Build argv for launching watch directly in foreground mode.
+
+    Console-script launchers are executables, not Python scripts. Running
+    ``pythonw.exe reMarkableSync.exe`` exits immediately, so use module mode
+    for installed console entry points and script mode only for real .py files.
+    """
+    if getattr(sys, "frozen", False):
+        return [sys.executable, "watch", "--foreground"]
+
     script = Path(sys.argv[0]).resolve()
-    return f'"{sys.executable}" "{script}" watch'
+    executable = str(_pythonw_executable() if sys.platform == "win32" else Path(sys.executable))
+
+    if script.suffix.lower() == ".py":
+        return [executable, str(script), "watch", "--foreground"]
+
+    return [executable, "-m", _CLI_MODULE, "watch", "--foreground"]
+
+
+def _get_watch_command_line() -> str:
+    """Build the command line that would launch watch mode."""
+    return subprocess.list2cmdline(_build_watch_launch_args())
 
 
 def _is_startup_enabled() -> bool:

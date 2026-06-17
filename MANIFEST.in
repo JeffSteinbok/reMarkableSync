@@ -2,5 +2,6 @@ include README.md
 include requirements.txt
 include requirements-dev.txt
 include LICENSE
+include docs/logo.png
 recursive-include src *.py
 recursive-include tests *.py
