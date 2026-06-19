@@ -22,6 +22,7 @@ from .base_provider import (
     AIRateLimitError,
     BaseAIProvider,
     get_transcription_prompt,
+    parse_retry_after,
 )
 
 # Token exchange endpoint and headers
@@ -252,7 +253,7 @@ class GitHubCopilotProvider(BaseAIProvider):
 
         except Exception as exc:
             logging.error("Copilot Anthropic transcription error: %s", exc)
-            retry = _parse_retry_after(exc)
+            retry = parse_retry_after(exc)
             if retry is not None:
                 raise AIRateLimitError(str(exc), retry_after=retry) from exc
             raise AIProviderError(f"GitHub Copilot transcription failed: {exc}") from exc
@@ -311,7 +312,7 @@ class GitHubCopilotProvider(BaseAIProvider):
 
         except Exception as exc:
             logging.error("Copilot OpenAI Responses transcription error: %s", exc)
-            retry = _parse_retry_after(exc)
+            retry = parse_retry_after(exc)
             if retry is not None:
                 raise AIRateLimitError(str(exc), retry_after=retry) from exc
             raise AIProviderError(f"GitHub Copilot transcription failed: {exc}") from exc
@@ -346,29 +347,10 @@ class GitHubCopilotProvider(BaseAIProvider):
             return response.choices[0].message.content or raw_text
         except Exception as exc:
             logging.error("Copilot cleanup error: %s", exc)
-            retry = _parse_retry_after(exc)
+            retry = parse_retry_after(exc)
             if retry is not None:
                 raise AIRateLimitError(str(exc), retry_after=retry) from exc
             raise AIProviderError(f"GitHub Copilot cleanup failed: {exc}") from exc
-
-
-def _parse_retry_after(exc: Exception) -> Optional[int]:
-    """Extract retry-after seconds from a rate-limit exception."""
-    try:
-        from openai import RateLimitError
-
-        if not isinstance(exc, RateLimitError):
-            return None
-    except ImportError:
-        exc_str = str(exc)
-        if "429" not in exc_str and "RateLimit" not in exc_str:
-            return None
-
-    exc_str = str(exc)
-    match = re.search(r"[Pp]lease wait (\d+) seconds", exc_str)
-    if match:
-        return int(match.group(1))
-    return 60
 
 
 def get_available_models(github_token: str, vision_only: bool = False) -> List[Tuple[str, str]]:

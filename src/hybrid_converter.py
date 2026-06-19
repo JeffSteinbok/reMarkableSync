@@ -25,8 +25,8 @@ import warnings
 from pathlib import Path
 from typing import Dict, List, Optional
 
-# Import modular converter classes
-from .converters import V4Converter, V5Converter, V6Converter
+# Import modular converter classes and registry
+from .converters import ConverterRegistry, get_default_registry
 from .template_renderer import TemplateRenderer
 from .utils import sanitize_name
 
@@ -63,12 +63,6 @@ def setup_logging(verbose: bool = False):
     # Suppress verbose debug messages from svglib that clutter the output
     logging.getLogger("svglib.svglib").setLevel(logging.WARNING)
     logging.getLogger("reportlab").setLevel(logging.WARNING)
-
-
-# Initialize converter instances as module-level objects for reuse
-v4_converter = V4Converter()
-v5_converter = V5Converter()
-v6_converter = V6Converter()
 
 
 def find_notebooks(backup_dir: Path) -> List[Dict]:
@@ -168,7 +162,11 @@ def find_notebooks(backup_dir: Path) -> List[Dict]:
     return notebooks
 
 
-def svg_to_pdf(svg_file: Path, pdf_file: Path) -> bool:
+def svg_to_pdf(
+    svg_file: Path,
+    pdf_file: Path,
+    registry: Optional[ConverterRegistry] = None,
+) -> bool:
     """Convert SVG to PDF using modular converter utilities.
 
     This is a wrapper function that maintains backward compatibility
@@ -177,12 +175,17 @@ def svg_to_pdf(svg_file: Path, pdf_file: Path) -> bool:
     Args:
         svg_file: Path to input SVG file
         pdf_file: Path to output PDF file
+        registry: Optional converter registry (uses default if not provided)
 
     Returns:
         bool: True if conversion successful, False otherwise
     """
-    # Use any converter instance for the utility method since it's in the base class
-    return v6_converter.svg_to_pdf(svg_file, pdf_file)
+    reg = registry or get_default_registry()
+    # Use the v6 converter for utility methods (they're in the base class)
+    converter = reg.get_for_version(6)
+    if converter is None:
+        return False
+    return converter.svg_to_pdf(svg_file, pdf_file)
 
 
 def merge_pdf_with_template(
@@ -346,7 +349,11 @@ def get_folder_hierarchy(notebook: Dict, backup_dir: Path) -> List[tuple]:
     return hierarchy
 
 
-def convert_v6_file_with_rmc(rm_file: Path, output_file: Path) -> bool:
+def convert_v6_file_with_rmc(
+    rm_file: Path,
+    output_file: Path,
+    registry: Optional[ConverterRegistry] = None,
+) -> bool:
     """Convert v6 format .rm file to PDF using modular V6Converter.
 
     This is a wrapper function that maintains backward compatibility
@@ -355,14 +362,23 @@ def convert_v6_file_with_rmc(rm_file: Path, output_file: Path) -> bool:
     Args:
         rm_file: Path to the v6 format .rm file
         output_file: Path where PDF should be saved
+        registry: Optional converter registry (uses default if not provided)
 
     Returns:
         bool: True if conversion successful, False otherwise
     """
-    return v6_converter.convert_to_pdf(rm_file, output_file)
+    reg = registry or get_default_registry()
+    converter = reg.get_for_version(6)
+    if converter is None:
+        return False
+    return converter.convert_to_pdf(rm_file, output_file)
 
 
-def convert_v5_file_with_rmrl(rm_file: Path, output_file: Path) -> bool:
+def convert_v5_file_with_rmrl(
+    rm_file: Path,
+    output_file: Path,
+    registry: Optional[ConverterRegistry] = None,
+) -> bool:
     """Convert v5 format .rm file to PDF using modular V5Converter.
 
     This is a wrapper function that maintains backward compatibility
@@ -371,14 +387,23 @@ def convert_v5_file_with_rmrl(rm_file: Path, output_file: Path) -> bool:
     Args:
         rm_file: Path to the v5 format .rm file
         output_file: Path where PDF should be saved
+        registry: Optional converter registry (uses default if not provided)
 
     Returns:
         bool: True if conversion successful, False otherwise
     """
-    return v5_converter.convert_to_pdf(rm_file, output_file)
+    reg = registry or get_default_registry()
+    converter = reg.get_for_version(5)
+    if converter is None:
+        return False
+    return converter.convert_to_pdf(rm_file, output_file)
 
 
-def convert_v4_file_with_rmrl(rm_file: Path, output_file: Path) -> bool:
+def convert_v4_file_with_rmrl(
+    rm_file: Path,
+    output_file: Path,
+    registry: Optional[ConverterRegistry] = None,
+) -> bool:
     """Convert v4 format .rm file to PDF using modular V4Converter.
 
     This is a wrapper function that maintains backward compatibility
@@ -387,6 +412,7 @@ def convert_v4_file_with_rmrl(rm_file: Path, output_file: Path) -> bool:
     Args:
         rm_file: Path to the v4 format .rm file
         output_file: Path where PDF should be saved
+        registry: Optional converter registry (uses default if not provided)
 
     Returns:
         bool: True if conversion successful, False otherwise
@@ -394,10 +420,18 @@ def convert_v4_file_with_rmrl(rm_file: Path, output_file: Path) -> bool:
     Note:
         v4 format support is limited and may fail for many files.
     """
-    return v4_converter.convert_to_pdf(rm_file, output_file)
+    reg = registry or get_default_registry()
+    converter = reg.get_for_version(4)
+    if converter is None:
+        return False
+    return converter.convert_to_pdf(rm_file, output_file)
 
 
-def copy_existing_pdf(pdf_file: Path, output_file: Path) -> bool:
+def copy_existing_pdf(
+    pdf_file: Path,
+    output_file: Path,
+    registry: Optional[ConverterRegistry] = None,
+) -> bool:
     """Copy existing PDF file using base converter utility.
 
     This is a wrapper function that maintains backward compatibility
@@ -406,12 +440,17 @@ def copy_existing_pdf(pdf_file: Path, output_file: Path) -> bool:
     Args:
         pdf_file: Path to the source PDF file
         output_file: Path where PDF should be copied
+        registry: Optional converter registry (uses default if not provided)
 
     Returns:
         bool: True if copy successful, False otherwise
     """
-    # Use any converter instance for the utility method since it's in the base class
-    return v6_converter.copy_existing_pdf(pdf_file, output_file)
+    reg = registry or get_default_registry()
+    # Use the v6 converter for utility methods (they're in the base class)
+    converter = reg.get_for_version(6)
+    if converter is None:
+        return False
+    return converter.copy_existing_pdf(pdf_file, output_file)
 
 
 def get_page_templates(content_file: Path) -> Dict[str, str]:

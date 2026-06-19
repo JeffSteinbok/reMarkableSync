@@ -19,13 +19,14 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import paramiko
 from scp import SCPException
 
 from .connection import ReMarkableConnection
 from .metadata import FileMetadata
+from .protocols import DEFAULT_TABLET_CONFIG, ConnectionProtocol, TabletConfig
 
 
 class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
@@ -50,6 +51,9 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
         wifi_host: str = "",
         pre_sync_command: str = "",
         post_sync_command: str = "",
+        connection: Optional[ConnectionProtocol] = None,
+        tablet_config: Optional[TabletConfig] = None,
+        config: Optional[Dict[str, Any]] = None,
     ):
         """Initialize backup orchestrator.
 
@@ -61,6 +65,9 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
             wifi_host: Wi-Fi IP/hostname (auto-discovered if empty)
             pre_sync_command: Shell command to run before SSH connects.
             post_sync_command: Shell command to run after SSH disconnects.
+            connection: Optional connection instance for dependency injection.
+            tablet_config: Tablet-specific configuration (paths, etc.).
+            config: Application configuration dict (injected instead of loading globally).
         """
         self.backup_dir = backup_dir
         self.files_dir = backup_dir / "Notebooks"
@@ -70,19 +77,37 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
         self.files_dir.mkdir(parents=True, exist_ok=True)
         self.templates_dir.mkdir(parents=True, exist_ok=True)
 
-        self.connection = ReMarkableConnection(
-            password=password,
-            host=host,
-            use_wifi=use_wifi,
-            wifi_host=wifi_host,
-            pre_sync_command=pre_sync_command,
-            post_sync_command=post_sync_command,
-        )
+        # Store injected config or None (will load on demand if needed)
+        self._config = config
+
+        # Use injected connection or create default
+        if connection is not None:
+            self.connection = connection
+        else:
+            self.connection = ReMarkableConnection(
+                password=password,
+                host=host,
+                use_wifi=use_wifi,
+                wifi_host=wifi_host,
+                pre_sync_command=pre_sync_command,
+                post_sync_command=post_sync_command,
+            )
         self.metadata = FileMetadata(self.metadata_file)
 
-        # ReMarkable paths
-        self.remote_xochitl_dir = "/home/root/.local/share/remarkable/xochitl"
-        self.remote_templates_dir = "/usr/share/remarkable/templates"
+        # Use injected tablet config or default
+        self._tablet_config = tablet_config or DEFAULT_TABLET_CONFIG
+
+        # ReMarkable paths (from tablet config)
+        self.remote_xochitl_dir = self._tablet_config.xochitl_dir
+        self.remote_templates_dir = self._tablet_config.templates_dir
+
+    def _get_config(self) -> Dict[str, Any]:
+        """Get configuration, loading from disk if not injected."""
+        if self._config is not None:
+            return self._config
+        from ..config import load_config
+
+        return load_config()
 
     def _resolve_allowed_uuids(self) -> Optional[Set[str]]:
         """Resolve which notebook UUIDs belong to the configured folder filter.
@@ -91,11 +116,7 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
         to determine folder hierarchy, then returns UUIDs that belong to
         selected folders. Returns None if no filter is configured.
         """
-        import json
-
-        from ..config import load_config
-
-        config = load_config()
+        config = self._get_config()
         folder_names = config.get("folders", [])
         if not folder_names:
             print("  Syncing: all folders")
@@ -501,10 +522,9 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
 
         logging.info("Starting PDF conversion...")
 
-        # Set output directory from config
-        from ..config import load_config
+        # Get config (injected or loaded)
+        config = self._get_config()
 
-        config = load_config()
         pdf_dir = config.get("pdf_dir", "")
         if pdf_dir:
             output_dir = Path(pdf_dir)
@@ -516,9 +536,6 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
             logging.info("No notebooks were updated - skipping PDF conversion")
             return True
 
-        from ..config import load_config
-
-        config = load_config()
         folder_filter = config.get("folders", []) or None
 
         try:

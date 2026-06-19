@@ -10,7 +10,13 @@ import os
 from pathlib import Path
 from typing import List
 
-from .base_provider import CLEANUP_PROMPT, TRANSCRIPTION_PROMPT, AIProviderError, BaseAIProvider
+from .base_provider import (
+    CLEANUP_PROMPT,
+    TRANSCRIPTION_PROMPT,
+    AIProviderError,
+    AIRateLimitError,
+    BaseAIProvider,
+)
 
 
 class ClaudeProvider(BaseAIProvider):
@@ -104,6 +110,10 @@ class ClaudeProvider(BaseAIProvider):
             return message.content[0].text
         except Exception as exc:  # noqa: BLE001
             logging.error("Claude transcription API error: %s", exc)
+            # Check for rate limit errors from Anthropic
+            if _is_anthropic_rate_limit(exc):
+                retry = _parse_anthropic_retry_after(exc)
+                raise AIRateLimitError(str(exc), retry_after=retry) from exc
             raise AIProviderError(f"Claude transcription failed: {exc}") from exc
 
     def cleanup_text(self, raw_text: str, context: str = "") -> str:
@@ -129,4 +139,33 @@ class ClaudeProvider(BaseAIProvider):
             return message.content[0].text
         except Exception as exc:  # noqa: BLE001
             logging.error("Claude cleanup API error: %s", exc)
+            # Check for rate limit errors from Anthropic
+            if _is_anthropic_rate_limit(exc):
+                retry = _parse_anthropic_retry_after(exc)
+                raise AIRateLimitError(str(exc), retry_after=retry) from exc
             raise AIProviderError(f"Claude cleanup failed: {exc}") from exc
+
+
+def _is_anthropic_rate_limit(exc: Exception) -> bool:
+    """Check if an exception is an Anthropic rate limit error."""
+    try:
+        from anthropic import RateLimitError
+
+        return isinstance(exc, RateLimitError)
+    except ImportError:
+        # Fall back to string detection
+        exc_str = str(exc)
+        return "429" in exc_str or "rate" in exc_str.lower()
+
+
+def _parse_anthropic_retry_after(exc: Exception) -> int:
+    """Extract retry-after seconds from an Anthropic rate limit exception."""
+    import re
+
+    exc_str = str(exc)
+    # Try to find retry-after in the error message
+    match = re.search(r"retry.after[:\s]+(\d+)", exc_str, re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+    # Default backoff for Anthropic
+    return 60

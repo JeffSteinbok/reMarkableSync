@@ -10,20 +10,26 @@ import shutil
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+# Import the protocol to ensure MockConnection stays in sync
+from src.backup.protocols import DEFAULT_TABLET_CONFIG, TabletConfig
+
 # Path to the fixture tablet filesystem
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "fake_tablet"
 XOCHITL_DIR = FIXTURES_DIR / "xochitl"
 
-# Mirrors the tablet's remote path
-REMOTE_XOCHITL = "/home/root/.local/share/remarkable/xochitl"
+# Mirrors the tablet's remote path (from default tablet config)
+REMOTE_XOCHITL = DEFAULT_TABLET_CONFIG.xochitl_dir
 
 
 class MockConnection:
     """Mock replacement for ReMarkableConnection.
 
     Reads from the local fixtures directory instead of connecting via SSH.
-    Implements the same interface as ReMarkableConnection so it can be used
+    Implements the ConnectionProtocol interface so it can be used
     as a drop-in substitute in tests.
+
+    Note: This class intentionally implements ConnectionProtocol to ensure
+    it stays in sync with the real ReMarkableConnection interface.
     """
 
     KEYRING_SERVICE = "RemarkableSync"
@@ -38,6 +44,7 @@ class MockConnection:
         use_wifi: bool = False,
         wifi_host: str = "",
         fixture_dir: Path | None = None,
+        tablet_config: TabletConfig | None = None,
     ):
         self.host = host
         self.username = username
@@ -47,6 +54,7 @@ class MockConnection:
         self._connected = False
         self._fixture_dir = fixture_dir or FIXTURES_DIR
         self._xochitl_dir = self._fixture_dir / "xochitl"
+        self._tablet_config = tablet_config or DEFAULT_TABLET_CONFIG
 
     def get_saved_password(self) -> str | None:
         return "mock-password"

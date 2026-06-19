@@ -7,6 +7,28 @@ including SSH connection management, file metadata handling, and backup orchestr
 
 from .backup_manager import ReMarkableBackup
 from .connection import ReMarkableConnection
+from .credential_store import (
+    InMemoryCredentialStore,
+    KeyringCredentialStore,
+    create_credential_store,
+)
 from .metadata import FileMetadata
+from .protocols import (
+    DEFAULT_TABLET_CONFIG,
+    ConnectionProtocol,
+    CredentialStoreProtocol,
+    TabletConfig,
+)
 
-__all__ = ["ReMarkableConnection", "FileMetadata", "ReMarkableBackup"]
+__all__ = [
+    "ReMarkableConnection",
+    "FileMetadata",
+    "ReMarkableBackup",
+    "ConnectionProtocol",
+    "CredentialStoreProtocol",
+    "TabletConfig",
+    "DEFAULT_TABLET_CONFIG",
+    "KeyringCredentialStore",
+    "InMemoryCredentialStore",
+    "create_credential_store",
+]

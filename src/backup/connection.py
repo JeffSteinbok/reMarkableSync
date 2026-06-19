@@ -20,6 +20,8 @@ import paramiko
 from scp import SCPClient
 
 from ..utils.console import print_error, print_success, print_warn
+from .credential_store import create_credential_store
+from .protocols import DEFAULT_TABLET_CONFIG, CredentialStoreProtocol, TabletConfig
 
 # Suppress paramiko noise regardless of when setup_logging is called
 for _n in ("paramiko", "paramiko.transport", "paramiko.auth", "paramiko.channel"):
@@ -27,19 +29,11 @@ for _n in ("paramiko", "paramiko.transport", "paramiko.auth", "paramiko.channel"
     _l.setLevel(logging.CRITICAL)
     _l.propagate = False
 
-try:
-    import keyring  # type: ignore
-
-    KEYRING_AVAILABLE = True
-except ImportError:
-    KEYRING_AVAILABLE = False
-    logging.warning("keyring library not available - password saving disabled")
-
 # Default USB networking address assigned by the reMarkable USB driver
-USB_HOST = "10.11.99.1"
+USB_HOST = DEFAULT_TABLET_CONFIG.usb_host
 
 # mDNS/Bonjour hostname that many reMarkable tablets advertise on the LAN
-MDNS_HOSTNAME = "reMarkable.local"
+MDNS_HOSTNAME = DEFAULT_TABLET_CONFIG.mdns_hostname
 
 
 def discover_tablet_host(timeout: float = 3.0) -> Optional[str]:
@@ -71,6 +65,8 @@ class ReMarkableConnection:
 
     Provides a robust connection interface with retry logic and error handling
     for connecting to reMarkable tablets via USB or Wi-Fi networking.
+
+    Implements ConnectionProtocol for dependency injection and testability.
     """
 
     KEYRING_SERVICE = "reMarkableSync"
@@ -86,6 +82,8 @@ class ReMarkableConnection:
         wifi_host: str = "",
         pre_sync_command: str = "",
         post_sync_command: str = "",
+        credential_store: Optional[CredentialStoreProtocol] = None,
+        tablet_config: Optional[TabletConfig] = None,
     ):
         """Initialize connection parameters.
 
@@ -101,7 +99,13 @@ class ReMarkableConnection:
                        network.  Ignored when *use_wifi* is False.
             pre_sync_command: Shell command to run before SSH connects.
             post_sync_command: Shell command to run after SSH disconnects.
+            credential_store: Credential storage backend (default: system keyring).
+            tablet_config: Tablet-specific configuration (default: reMarkable defaults).
         """
+        # Store injected dependencies
+        self._credential_store = credential_store or create_credential_store()
+        self._tablet_config = tablet_config or DEFAULT_TABLET_CONFIG
+
         # Resolve effective host
         if use_wifi:
             if wifi_host:
@@ -123,22 +127,15 @@ class ReMarkableConnection:
         self.post_sync_command = post_sync_command.strip()
 
     def get_saved_password(self) -> str | None:
-        """Get saved password from system keyring.
+        """Get saved password from credential storage.
 
         Returns:
             str: Saved password or None if not found
         """
-        if not KEYRING_AVAILABLE:
-            return None
-
-        try:
-            return keyring.get_password(self.KEYRING_SERVICE, self.KEYRING_USERNAME)
-        except Exception as e:
-            logging.debug(f"Failed to retrieve saved password: {e}")
-            return None
+        return self._credential_store.get_password(self.KEYRING_SERVICE, self.KEYRING_USERNAME)
 
     def save_password(self, password: str) -> bool:
-        """Save password to system keyring.
+        """Save password to credential storage.
 
         Args:
             password: Password to save
@@ -146,32 +143,20 @@ class ReMarkableConnection:
         Returns:
             bool: True if saved successfully, False otherwise
         """
-        if not KEYRING_AVAILABLE:
-            return False
-
-        try:
-            keyring.set_password(self.KEYRING_SERVICE, self.KEYRING_USERNAME, password)
+        success = self._credential_store.set_password(
+            self.KEYRING_SERVICE, self.KEYRING_USERNAME, password
+        )
+        if success:
             self.password_saved = True
-            return True
-        except Exception as e:
-            logging.warning(f"Failed to save password: {e}")
-            return False
+        return success
 
     def delete_saved_password(self) -> bool:
-        """Delete saved password from system keyring.
+        """Delete saved password from credential storage.
 
         Returns:
             bool: True if deleted successfully, False otherwise
         """
-        if not KEYRING_AVAILABLE:
-            return False
-
-        try:
-            keyring.delete_password(self.KEYRING_SERVICE, self.KEYRING_USERNAME)
-            return True
-        except Exception as e:
-            logging.debug(f"Failed to delete saved password: {e}")
-            return False
+        return self._credential_store.delete_password(self.KEYRING_SERVICE, self.KEYRING_USERNAME)
 
     def get_password(self) -> str:
         """Get SSH password from user input or saved keyring.
