@@ -556,13 +556,27 @@ def _run_wizard(current, inquirer) -> int:
         print_warn("  WRN - Could not connect to tablet. Folder selection skipped.")
         folders = current.get("folders", [])
 
+    # Save password to keyring (not in config file)
+    password_saved_to_keyring = False
+    if password:
+        from src.backup.credential_store import create_credential_store
+
+        store = create_credential_store(use_keyring=True)
+        if store.set_password("reMarkableSync", "reMarkable_ssh", password):
+            password_saved_to_keyring = True
+        else:
+            print_warn(
+                "  WRN - Could not save password to keyring. You may need to enter it each sync."
+            )
+
     # Save configuration — preserve keys not managed by this wizard
+    # Note: password is stored in keyring, not in config file
     config = dict(current)
     config.update(
         {
             "connection_mode": connection_mode,
             "wifi_host": wifi_host,
-            "password": password,
+            "password_in_keyring": password_saved_to_keyring,
             "backup_dir": backup_dir,
             "pdf_dir": pdf_dir,
             "folders": folders,

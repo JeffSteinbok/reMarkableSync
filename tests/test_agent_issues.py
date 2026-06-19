@@ -129,9 +129,13 @@ class TestConnectionFailureMessage:
         conn.password = "test_password"
 
         with (
+            patch("socket.socket") as mock_socket_class,
             patch("src.backup.connection.paramiko.SSHClient") as mock_client_cls,
             patch("src.backup.connection.print_error") as mock_print_error,
         ):
+            mock_socket = MagicMock()
+            mock_socket_class.return_value = mock_socket
+
             mock_client = MagicMock()
             mock_client_cls.return_value = mock_client
             mock_client.connect.side_effect = paramiko.SSHException(
@@ -156,9 +160,14 @@ class TestConnectionFailureMessage:
         conn.password = "test_password"
 
         with (
+            patch("socket.socket") as mock_socket_class,
             patch("src.backup.connection.paramiko.SSHClient") as mock_client_cls,
             patch("src.backup.connection.print_error"),
         ):
+            mock_socket = MagicMock()
+            mock_socket_class.return_value = mock_socket
+            mock_socket.connect.side_effect = OSError("Connection refused")
+
             mock_client = MagicMock()
             mock_client_cls.return_value = mock_client
             mock_client.connect.side_effect = OSError("Connection refused")

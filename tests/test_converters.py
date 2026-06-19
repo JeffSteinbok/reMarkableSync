@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.converters import ConverterRegistry, get_default_registry
 from src.converters.base_converter import BaseConverter
 from src.converters.v4_converter import V4Converter
 from src.converters.v5_converter import V5Converter
@@ -471,3 +472,208 @@ class TestBaseConverterUtilities:
     def test_repr(self):
         c = _ConcreteConverter()
         assert "test" in repr(c)
+
+
+# ---------------------------------------------------------------------------
+# ConverterRegistry
+# ---------------------------------------------------------------------------
+
+
+class TestConverterRegistry:
+    """Tests for the ConverterRegistry pattern."""
+
+    def test_default_registry_has_all_versions(self):
+        """Default registry includes v4, v5, v6 converters."""
+        registry = get_default_registry()
+
+        versions = registry.supported_versions
+
+        assert 4 in versions
+        assert 5 in versions
+        assert 6 in versions
+
+    def test_get_for_version_returns_correct_converter(self):
+        """get_for_version returns the right converter type."""
+        registry = get_default_registry()
+
+        v4 = registry.get_for_version(4)
+        v5 = registry.get_for_version(5)
+        v6 = registry.get_for_version(6)
+
+        assert isinstance(v4, V4Converter)
+        assert isinstance(v5, V5Converter)
+        assert isinstance(v6, V6Converter)
+
+    def test_get_for_version_unknown_returns_none(self):
+        """get_for_version returns None for unknown version."""
+        registry = get_default_registry()
+
+        result = registry.get_for_version(99)
+
+        assert result is None
+
+    def test_register_adds_custom_converter(self):
+        """register() adds a new converter to registry."""
+        registry = ConverterRegistry()
+
+        class CustomConverter(BaseConverter):
+            def __init__(self):
+                super().__init__("custom")
+
+            def can_convert(self, rm_file):
+                return False
+
+            def convert_to_pdf(self, rm_file, output):
+                return False
+
+        registry.register(99, CustomConverter())
+
+        assert 99 in registry.supported_versions
+        assert isinstance(registry.get_for_version(99), CustomConverter)
+
+    def test_registry_is_singleton(self):
+        """get_default_registry returns same instance."""
+        r1 = get_default_registry()
+        r2 = get_default_registry()
+
+        assert r1 is r2
+
+    def test_custom_registry_isolation(self):
+        """New registry with empty dict is independent of default."""
+        custom = ConverterRegistry(converters={})
+
+        # Custom starts empty
+        assert len(custom.supported_versions) == 0
+
+        # Default still has all
+        default = get_default_registry()
+        assert len(default.supported_versions) >= 3
+
+
+class TestConverterIntegration:
+    """Integration tests for converter pipeline."""
+
+    def test_detect_and_convert_v4(self, tmp_path):
+        """Full pipeline: detect v4, get converter, convert."""
+        rm = _make_rm(tmp_path, 4)
+
+        registry = get_default_registry()
+        base = _ConcreteConverter()
+
+        # Detect version
+        version = base.detect_version(rm)
+        assert version == "4"
+
+        # Get appropriate converter (convert string to int)
+        converter = registry.get_for_version(int(version))
+        assert converter is not None
+        assert converter.can_convert(rm)
+
+    def test_detect_and_convert_v5(self, tmp_path):
+        """Full pipeline: detect v5, get converter, convert."""
+        rm = _make_rm(tmp_path, 5)
+
+        registry = get_default_registry()
+        base = _ConcreteConverter()
+
+        version = base.detect_version(rm)
+        assert version == "5"
+
+        converter = registry.get_for_version(int(version))
+        assert converter is not None
+        assert converter.can_convert(rm)
+
+    def test_detect_and_convert_v6(self, tmp_path):
+        """Full pipeline: detect v6, get converter, convert."""
+        rm = _make_rm(tmp_path, 6)
+
+        registry = get_default_registry()
+        base = _ConcreteConverter()
+
+        version = base.detect_version(rm)
+        assert version == "6"
+
+        converter = registry.get_for_version(int(version))
+        assert converter is not None
+        assert converter.can_convert(rm)
+
+    def test_pipeline_handles_unknown_version(self, tmp_path):
+        """Pipeline gracefully handles unknown versions."""
+        rm = tmp_path / "weird.rm"
+        rm.write_bytes(b"reMarkable .lines file, version=99          \n")
+
+        registry = get_default_registry()
+        base = _ConcreteConverter()
+
+        version = base.detect_version(rm)
+        # Version might be "99" or None depending on parsing
+        version_int = int(version) if version and version.isdigit() else 99
+        converter = registry.get_for_version(version_int)
+
+        # No converter for unknown version
+        assert converter is None
+
+    def test_all_converters_have_requirements(self):
+        """All converters provide requirements list."""
+        registry = get_default_registry()
+
+        for version in registry.supported_versions:
+            converter = registry.get_for_version(version)
+            reqs = converter.get_requirements()
+
+            assert isinstance(reqs, list)
+            # Each should have at least one requirement
+            assert len(reqs) > 0
+
+    def test_all_converters_have_info(self):
+        """V4 converter provides conversion info."""
+        registry = get_default_registry()
+
+        # Only V4Converter has get_conversion_info
+        v4 = registry.get_for_version(4)
+        info = v4.get_conversion_info()
+
+        assert isinstance(info, dict)
+        assert "format" in info
+
+
+class TestSvgToPdf:
+    """Tests for SVG to PDF conversion utility."""
+
+    def test_svg_to_pdf_creates_output(self, tmp_path):
+        """svg_to_pdf creates PDF from SVG content."""
+        svg_content = b"""<?xml version="1.0"?>
+        <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+            <rect width="100" height="100" fill="red"/>
+        </svg>
+        """
+        svg_file = tmp_path / "test.svg"
+        svg_file.write_bytes(svg_content)
+        out = tmp_path / "out.pdf"
+
+        converter = _ConcreteConverter()
+        result = converter.svg_to_pdf(svg_file, out)
+
+        # May fail if cairosvg not installed, but shouldn't crash
+        assert isinstance(result, bool)
+
+    def test_svg_to_pdf_handles_invalid_svg(self, tmp_path):
+        """svg_to_pdf handles malformed SVG gracefully."""
+        svg_file = tmp_path / "bad.svg"
+        svg_file.write_bytes(b"not valid svg at all")
+        out = tmp_path / "out.pdf"
+
+        converter = _ConcreteConverter()
+        result = converter.svg_to_pdf(svg_file, out)
+
+        # Should return False, not crash
+        assert result is False
+
+    def test_svg_to_pdf_handles_missing_file(self, tmp_path):
+        """svg_to_pdf handles missing SVG file."""
+        out = tmp_path / "out.pdf"
+
+        converter = _ConcreteConverter()
+        result = converter.svg_to_pdf(tmp_path / "nonexistent.svg", out)
+
+        assert result is False

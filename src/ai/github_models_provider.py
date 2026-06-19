@@ -21,6 +21,7 @@ from .base_provider import (
     AIProviderError,
     AIRateLimitError,
     BaseAIProvider,
+    parse_retry_after,
 )
 
 
@@ -116,7 +117,7 @@ class GitHubModelsProvider(BaseAIProvider):
             return response.choices[0].message.content or ""
         except Exception as exc:  # noqa: BLE001
             logging.debug("GitHub Copilot transcription error: %s", exc)
-            retry = _parse_retry_after(exc)
+            retry = parse_retry_after(exc)
             if retry is not None:
                 raise AIRateLimitError(str(exc), retry_after=retry) from exc
             raise AIProviderError(f"GitHub Copilot transcription failed: {exc}") from exc
@@ -148,40 +149,7 @@ class GitHubModelsProvider(BaseAIProvider):
             return response.choices[0].message.content or raw_text
         except Exception as exc:  # noqa: BLE001
             logging.error("GitHub Models cleanup error: %s", exc)
-            retry = _parse_retry_after(exc)
+            retry = parse_retry_after(exc)
             if retry is not None:
                 raise AIRateLimitError(str(exc), retry_after=retry) from exc
             raise AIProviderError(f"GitHub Models cleanup failed: {exc}") from exc
-
-
-def _parse_retry_after(exc: Exception) -> int | None:
-    """Extract retry-after seconds from a rate-limit exception.
-
-    Checks for the OpenAI SDK ``RateLimitError`` type first, then
-    falls back to string matching on the message.
-
-    Returns seconds to wait, or None if this isn't a rate-limit error.
-    """
-    import re
-
-    try:
-        from openai import RateLimitError
-
-        if not isinstance(exc, RateLimitError):
-            return None
-    except ImportError:
-        # No SDK — fall back to string detection
-        exc_str = str(exc)
-        if "429" not in exc_str and "RateLimit" not in exc_str:
-            return None
-
-    exc_str = str(exc)
-    match = re.search(r"[Pp]lease wait (\d+) seconds", exc_str)
-    if match:
-        return int(match.group(1))
-    return 60
-    match = re.search(r"[Pp]lease wait (\d+) seconds", exc_str)
-    if match:
-        return int(match.group(1))
-    # Default backoff if we can detect 429 but no explicit wait time
-    return 60

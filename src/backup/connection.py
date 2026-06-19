@@ -1,14 +1,13 @@
 """
-reMarkable tablet SSH connection management.
+reMarkable tablet connection coordinator.
 
-Handles SSH and SCP connections to reMarkable tablets for file transfer
-and remote command execution.
+Provides a high-level interface for connecting to reMarkable tablets,
+coordinating SSH sessions, credentials, and pre/post sync commands.
 
-Connection modes
-----------------
-- USB (default): connects to 10.11.99.1 via the USB networking interface.
-- Wi-Fi: connects to any user-supplied hostname/IP address.
-- Discovery: optional mDNS/Bonjour discovery to locate the tablet on the LAN.
+This is a facade that orchestrates:
+- SSHSession for low-level SSH/SCP operations
+- CredentialStore for password management
+- TabletFilesystem for file operations
 """
 
 import logging
@@ -17,29 +16,18 @@ from typing import Dict, List, Optional, Tuple
 
 import click
 import paramiko
-from scp import SCPClient
 
 from ..utils.console import print_error, print_success, print_warn
-
-# Suppress paramiko noise regardless of when setup_logging is called
-for _n in ("paramiko", "paramiko.transport", "paramiko.auth", "paramiko.channel"):
-    _l = logging.getLogger(_n)
-    _l.setLevel(logging.CRITICAL)
-    _l.propagate = False
-
-try:
-    import keyring  # type: ignore
-
-    KEYRING_AVAILABLE = True
-except ImportError:
-    KEYRING_AVAILABLE = False
-    logging.warning("keyring library not available - password saving disabled")
+from .credential_store import create_credential_store
+from .protocols import DEFAULT_TABLET_CONFIG, CredentialStoreProtocol, TabletConfig
+from .ssh_session import SSHSession
+from .tablet_filesystem import TabletFilesystem
 
 # Default USB networking address assigned by the reMarkable USB driver
-USB_HOST = "10.11.99.1"
+USB_HOST = DEFAULT_TABLET_CONFIG.usb_host
 
 # mDNS/Bonjour hostname that many reMarkable tablets advertise on the LAN
-MDNS_HOSTNAME = "reMarkable.local"
+MDNS_HOSTNAME = DEFAULT_TABLET_CONFIG.mdns_hostname
 
 
 def discover_tablet_host(timeout: float = 3.0) -> Optional[str]:
@@ -67,10 +55,16 @@ def discover_tablet_host(timeout: float = 3.0) -> Optional[str]:
 
 
 class ReMarkableConnection:
-    """Handles SSH connection to reMarkable tablet.
+    """High-level connection coordinator for reMarkable tablet.
 
-    Provides a robust connection interface with retry logic and error handling
-    for connecting to reMarkable tablets via USB or Wi-Fi networking.
+    Orchestrates SSH sessions, credential management, and sync commands.
+    Implements ConnectionProtocol for dependency injection and testability.
+
+    Example:
+        conn = ReMarkableConnection()
+        if conn.connect():
+            files = conn.list_files("/path")
+            conn.disconnect()
     """
 
     KEYRING_SERVICE = "reMarkableSync"
@@ -86,22 +80,31 @@ class ReMarkableConnection:
         wifi_host: str = "",
         pre_sync_command: str = "",
         post_sync_command: str = "",
+        credential_store: Optional[CredentialStoreProtocol] = None,
+        tablet_config: Optional[TabletConfig] = None,
+        ssh_session: Optional[SSHSession] = None,
     ):
-        """Initialize connection parameters.
+        """Initialize connection coordinator.
 
         Args:
             host: reMarkable tablet IP address (default USB networking address).
-                  Ignored when *use_wifi* is True and *wifi_host* is provided.
-            username: SSH username (always 'root' for ReMarkable)
-            port: SSH port (default 22)
-            password: SSH password (will prompt if not provided)
-            use_wifi: When True, prefer the Wi-Fi address over the USB address.
-                      Falls back to USB if *wifi_host* is empty.
-            wifi_host: IP address or hostname of the tablet on the local
-                       network.  Ignored when *use_wifi* is False.
-            pre_sync_command: Shell command to run before SSH connects.
-            post_sync_command: Shell command to run after SSH disconnects.
+            username: SSH username (always 'root' for ReMarkable).
+            port: SSH port (default 22).
+            password: SSH password (will prompt if not provided).
+            use_wifi: When True, prefer Wi-Fi address over USB.
+            wifi_host: IP/hostname for Wi-Fi connection.
+            pre_sync_command: Shell command to run before connecting.
+            post_sync_command: Shell command to run after disconnecting.
+            credential_store: Credential storage backend (default: system keyring).
+            tablet_config: Tablet-specific configuration.
+            ssh_session: Injectable SSH session for testing.
         """
+        # Injected dependencies
+        self._credential_store = credential_store or create_credential_store()
+        self._tablet_config = tablet_config or DEFAULT_TABLET_CONFIG
+        self._session = ssh_session or SSHSession()
+        self._filesystem: Optional[TabletFilesystem] = None
+
         # Resolve effective host
         if use_wifi:
             if wifi_host:
@@ -115,82 +118,41 @@ class ReMarkableConnection:
         self.host = resolved_host
         self.username = username
         self.port = port
-        self.ssh_client = None
-        self.scp_client = None
         self.password = password
         self.password_saved = False
         self.pre_sync_command = pre_sync_command.strip()
         self.post_sync_command = post_sync_command.strip()
 
+    # -------------------------------------------------------------------------
+    # Credential management (delegated to CredentialStore)
+    # -------------------------------------------------------------------------
+
     def get_saved_password(self) -> str | None:
-        """Get saved password from system keyring.
-
-        Returns:
-            str: Saved password or None if not found
-        """
-        if not KEYRING_AVAILABLE:
-            return None
-
-        try:
-            return keyring.get_password(self.KEYRING_SERVICE, self.KEYRING_USERNAME)
-        except Exception as e:
-            logging.debug(f"Failed to retrieve saved password: {e}")
-            return None
+        """Get saved password from credential storage."""
+        return self._credential_store.get_password(self.KEYRING_SERVICE, self.KEYRING_USERNAME)
 
     def save_password(self, password: str) -> bool:
-        """Save password to system keyring.
-
-        Args:
-            password: Password to save
-
-        Returns:
-            bool: True if saved successfully, False otherwise
-        """
-        if not KEYRING_AVAILABLE:
-            return False
-
-        try:
-            keyring.set_password(self.KEYRING_SERVICE, self.KEYRING_USERNAME, password)
+        """Save password to credential storage."""
+        success = self._credential_store.set_password(
+            self.KEYRING_SERVICE, self.KEYRING_USERNAME, password
+        )
+        if success:
             self.password_saved = True
-            return True
-        except Exception as e:
-            logging.warning(f"Failed to save password: {e}")
-            return False
+        return success
 
     def delete_saved_password(self) -> bool:
-        """Delete saved password from system keyring.
-
-        Returns:
-            bool: True if deleted successfully, False otherwise
-        """
-        if not KEYRING_AVAILABLE:
-            return False
-
-        try:
-            keyring.delete_password(self.KEYRING_SERVICE, self.KEYRING_USERNAME)
-            return True
-        except Exception as e:
-            logging.debug(f"Failed to delete saved password: {e}")
-            return False
+        """Delete saved password from credential storage."""
+        return self._credential_store.delete_password(self.KEYRING_SERVICE, self.KEYRING_USERNAME)
 
     def get_password(self) -> str:
-        """Get SSH password from user input or saved keyring.
-
-        The reMarkable tablet's SSH password is found in:
-        Settings > Help > Copyright and licenses > GPLv3 Compliance
-
-        Returns:
-            str: The SSH password for tablet authentication
-        """
+        """Get SSH password from saved keyring or user input."""
         if not self.password:
-            # Try to get saved password first
             saved_password = self.get_saved_password()
             if saved_password:
                 print("Using saved SSH password...")
                 self.password = saved_password
                 return self.password
 
-            # No saved password, prompt user
             print("To get your reMarkable SSH password:")
             print("1. Connect your tablet via USB")
             print("2. Go to Settings > Help > Copyright and licenses")
@@ -199,15 +161,41 @@ class ReMarkableConnection:
 
         return self.password
 
+    # -------------------------------------------------------------------------
+    # Connection lifecycle
+    # -------------------------------------------------------------------------
+
+    @property
+    def ssh_client(self):
+        """Access underlying SSH client (for backward compatibility)."""
+        return self._session._ssh_client if self._session else None
+
+    @ssh_client.setter
+    def ssh_client(self, value):
+        """Set SSH client (for testing)."""
+        if self._session:
+            self._session._ssh_client = value
+
+    @property
+    def scp_client(self):
+        """Access underlying SCP client (for backward compatibility)."""
+        return self._session.scp_client if self._session else None
+
+    @scp_client.setter
+    def scp_client(self, value):
+        """Set SCP client (for testing)."""
+        if self._session:
+            self._session._scp_client = value
+
     def connect(self) -> bool:
         """Establish SSH connection to reMarkable tablet.
 
-        Runs the pre-sync command (if configured) before opening the SSH
-        connection, and the post-sync command (if configured) in disconnect().
+        Runs pre-sync command if configured, then connects via SSH.
 
         Returns:
-            bool: True if connection successful, False otherwise
+            True if connection successful, False otherwise.
         """
+        # Run pre-sync command
         if self.pre_sync_command:
             from ..utils import run_shell_command
 
@@ -218,116 +206,57 @@ class ReMarkableConnection:
                 return False
             print_success("  OK - Pre-sync done")
 
-        max_password_retries = 3
-        password_attempt = 0
+        # Try connecting with retries for password
+        max_retries = 3
+        attempt = 0
         used_saved_password = False
 
-        while password_attempt < max_password_retries:
-            try:
-                self.ssh_client = paramiko.SSHClient()
-                self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        while attempt < max_retries:
+            saved_password = self.get_saved_password()
+            if saved_password and not self.password:
+                used_saved_password = True
 
-                # Check if we're using a saved password
-                saved_password = self.get_saved_password()
-                if saved_password and not self.password:
-                    used_saved_password = True
+            password = self.get_password()
 
-                password = self.get_password()
+            # Try connection with escalating timeouts
+            timeouts = [(5, 5, 10), (15, 15, 15)]
+            total_timeout = sum(t[0] for t in timeouts)
+            print(f"  Connecting to {self.host} (up to {total_timeout}s)...")
 
-                # Try multiple connection approaches for ReMarkable compatibility
-                # First attempt is quick (5s) to fail fast if tablet is unreachable
-                connection_attempts = [
-                    {"timeout": 5, "banner_timeout": 5, "auth_timeout": 10},
-                    {"timeout": 15, "banner_timeout": 15, "auth_timeout": 15},
-                ]
-                total_timeout = sum(p["timeout"] for p in connection_attempts)
-
-                print(f"  Connecting to {self.host} (up to {total_timeout}s)...")
-
-                for i, params in enumerate(connection_attempts):
-                    try:
-                        # Quick TCP check before full SSH handshake
-                        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                        sock.settimeout(params["timeout"])
-                        try:
-                            sock.connect((self.host, self.port))
-                            sock.close()
-                        except (socket.timeout, OSError) as e:
-                            logging.info("TCP connect failed on attempt %d: %s", i + 1, e)
-                            if i < len(connection_attempts) - 1:
-                                continue  # Try next timeout
-                            raise  # Last attempt, let it bubble up
-
-                        logging.info(
-                            "Connection attempt %d with timeout %ds...", i + 1, params["timeout"]
-                        )
-                        self.ssh_client.connect(
-                            hostname=self.host,
-                            username=self.username,
-                            password=password,
-                            port=self.port,
-                            timeout=params["timeout"],
-                            banner_timeout=params["banner_timeout"],
-                            auth_timeout=params["auth_timeout"],
-                            allow_agent=False,
-                            look_for_keys=False,
-                        )
-
-                        transport = self.ssh_client.get_transport()
-                        if transport is None:
-                            raise ConnectionError("Failed to get SSH transport")
-                        self.scp_client = SCPClient(transport)
-                        logging.info("Connected to reMarkable tablet at %s", self.host)
-
+            for timeout, banner_timeout, auth_timeout in timeouts:
+                try:
+                    if self._session.connect(
+                        host=self.host,
+                        port=self.port,
+                        username=self.username,
+                        password=password,
+                        timeout=timeout,
+                        banner_timeout=banner_timeout,
+                        auth_timeout=auth_timeout,
+                    ):
+                        self._filesystem = TabletFilesystem(self._session)
                         return True
 
-                    except paramiko.AuthenticationException as e:
-                        logging.warning("Authentication failed on attempt %d: %s", i + 1, e)
-                        # Authentication failed - might be wrong password
-                        if used_saved_password:
-                            print_warn("  WRN - Saved password appears to be incorrect.")
-                            if click.confirm(
-                                "Would you like to enter a new password?", default=True
-                            ):
-                                # Delete the old saved password
-                                self.delete_saved_password()
-                                self.password = None
-                                used_saved_password = False
-                                password_attempt += 1
-                                break  # Break inner loop to retry with new password
-                            else:
-                                if click.confirm("Try saved password again?", default=False):
-                                    password_attempt += 1
-                                    break
-                                else:
-                                    return False
-                        else:
-                            print_error(
-                                "  ERR - Authentication failed. Please check your password."
-                            )
+                except paramiko.AuthenticationException:
+                    if used_saved_password:
+                        print_warn("  WRN - Saved password appears to be incorrect.")
+                        if click.confirm("Would you like to enter a new password?", default=True):
+                            self.delete_saved_password()
                             self.password = None
-                            password_attempt += 1
+                            used_saved_password = False
+                            attempt += 1
                             break
-                    except (paramiko.SSHException, OSError) as e:
-                        logging.debug("Connection attempt %d failed: %s", i + 1, e)
-                        if self.ssh_client:
-                            try:
-                                self.ssh_client.close()
-                            except (paramiko.SSHException, OSError):
-                                pass
-                            self.ssh_client = paramiko.SSHClient()
-                            self.ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-
-                logging.debug("All connection attempts failed")
-
-                print_error(
-                    f"  ERR - Connection to {self.host} failed. "
-                    "Check that the tablet is connected and try again."
-                )
-                return False
-
-            except (paramiko.SSHException, OSError) as e:
-                logging.debug("Failed to connect to ReMarkable: %s", e)
+                        elif not click.confirm("Try saved password again?", default=False):
+                            return False
+                        attempt += 1
+                        break
+                    else:
+                        print_error("  ERR - Authentication failed. Please check your password.")
+                        self.password = None
+                        attempt += 1
+                        break
+            else:
+                # All timeout attempts failed
                 print_error(
                     f"  ERR - Connection to {self.host} failed. "
                     "Check that the tablet is connected and try again."
@@ -338,13 +267,10 @@ class ReMarkableConnection:
         return False
 
     def disconnect(self):
-        """Close SSH and SCP connections to reMarkable tablet."""
+        """Close SSH connection and run post-sync command."""
         print("  Disconnecting...")
-        if self.scp_client:
-            self.scp_client.close()
-        if self.ssh_client:
-            self.ssh_client.close()
-        logging.info("Disconnected from reMarkable tablet")
+        self._session.disconnect()
+        self._filesystem = None
 
         if self.post_sync_command:
             from ..utils import run_shell_command
@@ -356,54 +282,58 @@ class ReMarkableConnection:
             else:
                 print_success("  OK - Post-sync done")
 
+    # -------------------------------------------------------------------------
+    # Remote operations (delegated to SSHSession and TabletFilesystem)
+    # -------------------------------------------------------------------------
+
     def execute_command(self, command: str) -> Tuple[str, str, int]:
         """Execute command on reMarkable tablet via SSH.
 
         Args:
-            command: Shell command to execute on the tablet
+            command: Shell command to execute.
 
         Returns:
-            Tuple of (stdout, stderr, exit_code)
+            Tuple of (stdout, stderr, exit_code).
 
         Raises:
-            ConnectionError: If not connected to tablet
+            ConnectionError: If not connected.
         """
-        if not self.ssh_client:
-            raise ConnectionError("Not connected to reMarkable tablet")
-
-        _, stdout, stderr = self.ssh_client.exec_command(command)
-        exit_code = stdout.channel.recv_exit_status()
-
-        return stdout.read().decode(), stderr.read().decode(), exit_code
+        return self._session.execute(command)
 
     def list_files(self, remote_path: str) -> List[Dict]:
         """List files in remote directory with metadata.
 
-        Uses the 'find' and 'stat' commands to get file modification times,
-        sizes, and paths for incremental sync comparison.
-
         Args:
-            remote_path: Remote directory path to scan
+            remote_path: Remote directory path to scan.
 
         Returns:
-            List of dictionaries containing file metadata:
-            - path: Full file path on tablet
-            - mtime: Unix timestamp of last modification
-            - size: File size in bytes
+            List of file metadata dictionaries.
         """
-        command = f"find {remote_path} -type f -exec stat -c '%Y %s %n' {{}} \\;"
-        stdout, stderr, exit_code = self.execute_command(command)
+        if self._filesystem:
+            return self._filesystem.list_files(remote_path)
 
-        if exit_code != 0:
-            logging.error("Failed to list files: %s", stderr)
-            return []
+        # Fallback: parse directly if we have a session with ssh_client
+        if self._session and self._session._ssh_client:
+            command = f"find {remote_path} -type f -exec stat -c '%Y %s %n' {{}} \\;"
+            stdout, stderr, exit_code = self._session.execute(command)
 
-        files = []
-        for line in stdout.strip().split("\n"):
-            if not line:
-                continue
-            parts = line.split(" ", 2)
-            if len(parts) == 3:
-                files.append({"path": parts[2], "mtime": int(parts[0]), "size": int(parts[1])})
+            if exit_code != 0:
+                logging.error("Failed to list files: %s", stderr)
+                return []
 
-        return files
+            files = []
+            for line in stdout.strip().split("\n"):
+                if not line:
+                    continue
+                parts = line.split(" ", 2)
+                if len(parts) == 3:
+                    files.append(
+                        {
+                            "path": parts[2],
+                            "mtime": int(parts[0]),
+                            "size": int(parts[1]),
+                        }
+                    )
+            return files
+
+        return []

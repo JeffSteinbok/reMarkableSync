@@ -4,9 +4,10 @@ All AI providers used by RemarkableSync (Claude, GitHub Models, etc.)
 must subclass ``BaseAIProvider`` and implement the three abstract methods.
 """
 
+import re
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 
 class AIProviderError(Exception):
@@ -67,6 +68,45 @@ def get_transcription_prompt() -> str:
     if custom:
         prompt += f"\n\nAdditional instructions:\n{custom}"
     return prompt
+
+
+# ---------------------------------------------------------------------------
+# Shared utility functions for AI providers
+# ---------------------------------------------------------------------------
+
+
+def parse_retry_after(exc: Exception) -> Optional[int]:
+    """Extract retry-after seconds from a rate-limit exception.
+
+    Checks for the OpenAI SDK ``RateLimitError`` type first, then
+    falls back to string matching on the message.
+
+    This is a shared utility used by multiple AI providers to handle
+    rate limiting consistently.
+
+    Args:
+        exc: The exception to parse for retry information.
+
+    Returns:
+        Seconds to wait before retrying, or None if this isn't a rate-limit error.
+    """
+    try:
+        from openai import RateLimitError
+
+        if not isinstance(exc, RateLimitError):
+            return None
+    except ImportError:
+        # No SDK — fall back to string detection
+        exc_str = str(exc)
+        if "429" not in exc_str and "RateLimit" not in exc_str:
+            return None
+
+    exc_str = str(exc)
+    match = re.search(r"[Pp]lease wait (\d+) seconds", exc_str)
+    if match:
+        return int(match.group(1))
+    # Default backoff if we can detect 429 but no explicit wait time
+    return 60
 
 
 class BaseAIProvider(ABC):

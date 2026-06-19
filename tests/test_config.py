@@ -103,13 +103,18 @@ class TestConfigModule:
         assert config == DEFAULT_CONFIG
 
     def test_save_and_load_round_trip(self, tmp_path):
+        """Test that config can be saved and loaded correctly.
+
+        Note: password field is intentionally stripped on save for security.
+        Use password_in_keyring flag instead.
+        """
         from src.config import load_config, save_config
 
         fake_path = tmp_path / "remarkablesync" / "config.json"
         test_config = {
             "connection_mode": "wifi",
             "wifi_host": "192.168.1.50",
-            "password": "secret",
+            "password_in_keyring": True,  # Flag only, actual password in keyring
             "folders": ["Work", "Personal"],
             "sync_actions": ["backup", "pdf", "ocr"],
             "ocr_enabled": True,
@@ -128,7 +133,12 @@ class TestConfigModule:
             save_config(test_config)
             loaded = load_config()
 
-        assert loaded == test_config
+        # config_version is added on save
+        assert loaded["connection_mode"] == test_config["connection_mode"]
+        assert loaded["wifi_host"] == test_config["wifi_host"]
+        assert loaded["password_in_keyring"] == test_config["password_in_keyring"]
+        assert loaded["folders"] == test_config["folders"]
+        assert "password" not in loaded  # Never stored in config
 
     def test_load_merges_new_keys(self, tmp_path):
         """Config saved with older version (missing keys) gets defaults merged."""

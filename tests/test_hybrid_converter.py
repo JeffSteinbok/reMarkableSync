@@ -6,8 +6,12 @@ from pathlib import Path
 import pytest
 
 from src.hybrid_converter import (
+    _hash_file,
+    copy_existing_pdf,
     find_notebooks,
     get_folder_hierarchy,
+    get_page_templates,
+    merge_pdfs,
     organize_notebooks_by_structure,
 )
 
@@ -179,3 +183,194 @@ class TestOrganizeNotebooksByStructure:
         structure = result["folder_structure"]
         assert "Work" in structure
         assert "" in structure  # root-level docs
+
+
+# ---------------------------------------------------------------------------
+# Additional coverage tests
+# ---------------------------------------------------------------------------
+
+
+class TestHashFile:
+    """Tests for _hash_file utility."""
+
+    def test_hash_existing_file(self, tmp_path):
+        """_hash_file returns MD5 hash of file contents."""
+        f = tmp_path / "test.txt"
+        f.write_text("hello world")
+
+        result = _hash_file(f)
+
+        assert len(result) == 32  # MD5 hex digest
+        assert result == "5eb63bbbe01eeed093cb22bb8f5acdc3"  # known MD5
+
+    def test_hash_nonexistent_file(self, tmp_path):
+        """_hash_file returns empty string for missing file."""
+        result = _hash_file(tmp_path / "nonexistent.txt")
+        assert result == ""
+
+    def test_hash_empty_file(self, tmp_path):
+        """_hash_file handles empty files."""
+        f = tmp_path / "empty.txt"
+        f.write_bytes(b"")
+
+        result = _hash_file(f)
+
+        assert len(result) == 32
+        assert result == "d41d8cd98f00b204e9800998ecf8427e"  # MD5 of empty
+
+    def test_hash_binary_file(self, tmp_path):
+        """_hash_file handles binary content."""
+        f = tmp_path / "binary.bin"
+        f.write_bytes(bytes(range(256)))
+
+        result = _hash_file(f)
+
+        assert len(result) == 32
+
+
+class TestMergePdfs:
+    """Tests for merge_pdfs function."""
+
+    def test_merge_creates_output(self, tmp_path):
+        """merge_pdfs creates output file from valid PDFs."""
+        # Create minimal valid PDFs
+        from PyPDF2 import PdfWriter
+
+        pdf1 = tmp_path / "page1.pdf"
+        pdf2 = tmp_path / "page2.pdf"
+        output = tmp_path / "merged.pdf"
+
+        for pdf_path in [pdf1, pdf2]:
+            writer = PdfWriter()
+            writer.add_blank_page(width=612, height=792)
+            with open(pdf_path, "wb") as f:
+                writer.write(f)
+
+        result = merge_pdfs([pdf1, pdf2], output)
+
+        assert result is True
+        assert output.exists()
+        assert output.stat().st_size > 0
+
+    def test_merge_skips_missing_files(self, tmp_path):
+        """merge_pdfs skips non-existent files."""
+        from PyPDF2 import PdfWriter
+
+        pdf1 = tmp_path / "exists.pdf"
+        writer = PdfWriter()
+        writer.add_blank_page(width=612, height=792)
+        with open(pdf1, "wb") as f:
+            writer.write(f)
+
+        missing = tmp_path / "missing.pdf"
+        output = tmp_path / "merged.pdf"
+
+        result = merge_pdfs([pdf1, missing], output)
+
+        assert result is True
+        assert output.exists()
+
+    def test_merge_empty_list(self, tmp_path):
+        """merge_pdfs handles empty input list."""
+        output = tmp_path / "merged.pdf"
+
+        result = merge_pdfs([], output)
+
+        # Empty merge creates empty file or fails
+        assert isinstance(result, bool)
+
+    def test_merge_creates_parent_dirs(self, tmp_path):
+        """merge_pdfs creates parent directories."""
+        from PyPDF2 import PdfWriter
+
+        pdf1 = tmp_path / "page1.pdf"
+        writer = PdfWriter()
+        writer.add_blank_page(width=612, height=792)
+        with open(pdf1, "wb") as f:
+            writer.write(f)
+
+        output = tmp_path / "nested" / "dir" / "merged.pdf"
+
+        result = merge_pdfs([pdf1], output)
+
+        assert result is True
+        assert output.exists()
+
+
+class TestCopyExistingPdf:
+    """Tests for copy_existing_pdf function."""
+
+    def test_copy_creates_destination(self, tmp_path):
+        """copy_existing_pdf copies file to destination."""
+        src = tmp_path / "source.pdf"
+        src.write_bytes(b"%PDF-1.4 fake pdf content")
+        dst = tmp_path / "dest.pdf"
+
+        result = copy_existing_pdf(src, dst)
+
+        assert result is True
+        assert dst.exists()
+        assert dst.read_bytes() == src.read_bytes()
+
+    def test_copy_missing_source(self, tmp_path):
+        """copy_existing_pdf returns False for missing source."""
+        result = copy_existing_pdf(tmp_path / "missing.pdf", tmp_path / "dest.pdf")
+        assert result is False
+
+    def test_copy_creates_parent_dirs(self, tmp_path):
+        """copy_existing_pdf creates parent directories."""
+        src = tmp_path / "source.pdf"
+        src.write_bytes(b"%PDF-1.4 content")
+        dst = tmp_path / "nested" / "dir" / "dest.pdf"
+
+        result = copy_existing_pdf(src, dst)
+
+        assert result is True
+        assert dst.exists()
+
+
+class TestGetPageTemplates:
+    """Tests for get_page_templates function."""
+
+    def test_parses_content_file(self, tmp_path):
+        """get_page_templates extracts page template mappings."""
+        content = {
+            "pages": ["page1-uuid", "page2-uuid"],
+            "cPages": {
+                "pages": [
+                    {"id": "page1-uuid", "template": {"value": "Blank"}},
+                    {"id": "page2-uuid", "template": {"value": "Lined"}},
+                ]
+            },
+        }
+        content_file = tmp_path / "notebook.content"
+        content_file.write_text(json.dumps(content))
+
+        result = get_page_templates(content_file)
+
+        assert result.get("page1-uuid") == "Blank"
+        assert result.get("page2-uuid") == "Lined"
+
+    def test_handles_missing_file(self, tmp_path):
+        """get_page_templates returns empty dict for missing file."""
+        result = get_page_templates(tmp_path / "missing.content")
+        assert result == {}
+
+    def test_handles_malformed_content(self, tmp_path):
+        """get_page_templates handles invalid JSON."""
+        content_file = tmp_path / "bad.content"
+        content_file.write_text("not valid json")
+
+        result = get_page_templates(content_file)
+
+        assert result == {}
+
+    def test_handles_missing_cpages(self, tmp_path):
+        """get_page_templates handles content without cPages."""
+        content = {"pages": ["page1"]}
+        content_file = tmp_path / "simple.content"
+        content_file.write_text(json.dumps(content))
+
+        result = get_page_templates(content_file)
+
+        assert result == {}
