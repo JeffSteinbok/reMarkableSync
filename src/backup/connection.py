@@ -314,8 +314,6 @@ class ReMarkableConnection:
 
         # Fallback: parse directly if we have a session with ssh_client
         if self._session and self._session._ssh_client:
-            import logging
-
             command = f"find {remote_path} -type f -exec stat -c '%Y %s %n' {{}} \\;"
             stdout, stderr, exit_code = self._session.execute(command)
 
