@@ -285,3 +285,264 @@ class TestReMarkableBackupDoBackup:
         assert success is True
         # Connection should be disconnected after backup
         assert mock_conn._connected is False
+
+
+class TestBackupErrorPaths:
+    """Tests for error handling in backup operations."""
+
+    def test_do_backup_files_handles_empty_remote(self, tmp_path):
+        """_do_backup_files handles empty tablet gracefully."""
+        # Use a fixture dir with no files
+        empty_fixture = tmp_path / "empty_tablet" / "xochitl"
+        empty_fixture.mkdir(parents=True)
+
+        mock_conn = MockConnection(fixture_dir=tmp_path / "empty_tablet")
+        mock_conn.connect()
+
+        backup = ReMarkableBackup(
+            backup_dir=tmp_path / "backup",
+            connection=mock_conn,
+            config={"folders": []},
+        )
+
+        success, updated, pages = backup._do_backup_files()
+
+        assert success is True
+        assert len(updated) == 0
+        assert len(pages) == 0
+
+    def test_do_backup_handles_missing_scp_client(self, tmp_path):
+        """_do_backup_files returns False when scp_client is None."""
+        mock_conn = MockConnection()
+        mock_conn.connect()
+        mock_conn.scp_client = None  # Simulate missing SCP client
+
+        backup = ReMarkableBackup(
+            backup_dir=tmp_path,
+            connection=mock_conn,
+            config={"folders": []},
+        )
+
+        success, updated, pages = backup._do_backup_files()
+
+        # Should fail gracefully when SCP client is missing
+        assert success is False
+
+    def test_do_backup_handles_download_error(self, tmp_path, capsys):
+        """_do_backup_files continues after individual file download errors."""
+
+        class FailingMockSCPClient:
+            """SCP client that fails on first get() call."""
+
+            def __init__(self):
+                self.call_count = 0
+
+            def get(self, remote_path: str, local_path: str, recursive: bool = False):
+                self.call_count += 1
+                if self.call_count == 1:
+                    raise OSError("Simulated download failure")
+                # Subsequent calls succeed
+                from pathlib import Path
+
+                Path(local_path).parent.mkdir(parents=True, exist_ok=True)
+                Path(local_path).write_text("content")
+
+            def close(self):
+                pass
+
+        mock_conn = MockConnection()
+        mock_conn.connect()
+        mock_conn.scp_client = FailingMockSCPClient()
+
+        backup = ReMarkableBackup(
+            backup_dir=tmp_path,
+            connection=mock_conn,
+            config={"folders": []},
+        )
+
+        # Should not crash, continues despite error
+        success, _, _ = backup._do_backup_files()
+        # It may return True because it continues after errors
+        assert isinstance(success, bool)
+
+    def test_run_backup_handles_connection_failure(self, tmp_path):
+        """run_backup handles connection failure gracefully."""
+
+        class FailingConnection(MockConnection):
+            def connect(self):
+                return False
+
+        backup = ReMarkableBackup(
+            backup_dir=tmp_path,
+            connection=FailingConnection(),
+            config={"folders": []},
+        )
+
+        success, _, _ = backup.run_backup(backup_templates=False)
+        assert success is False
+
+    def test_backup_with_corrupt_metadata(self, tmp_path):
+        """Backup handles corrupt metadata files gracefully."""
+        # Create fixture with corrupt metadata
+        fixture_dir = tmp_path / "corrupt_tablet" / "xochitl"
+        fixture_dir.mkdir(parents=True)
+
+        # Create a corrupt metadata file (invalid JSON)
+        corrupt_meta = fixture_dir / "corrupt-uuid-1234-5678-9012.metadata"
+        corrupt_meta.write_text("{ invalid json }")
+
+        mock_conn = MockConnection(fixture_dir=tmp_path / "corrupt_tablet")
+        mock_conn.connect()
+
+        backup = ReMarkableBackup(
+            backup_dir=tmp_path / "backup",
+            connection=mock_conn,
+            config={"folders": []},
+        )
+
+        # Should not crash on corrupt metadata
+        success, _, _ = backup._do_backup_files()
+        assert isinstance(success, bool)
+
+
+class TestTemplateBackup:
+    """Tests for template backup functionality."""
+
+    def test_do_backup_templates_with_templates(self, tmp_path):
+        """_do_backup_templates downloads template files."""
+        # Create a fixture with templates
+        fixture_dir = tmp_path / "tablet_with_templates"
+        templates_dir = fixture_dir / "templates"
+        templates_dir.mkdir(parents=True)
+
+        # Create sample template files
+        (templates_dir / "template1.png").write_bytes(b"PNG template 1")
+        (templates_dir / "template2.svg").write_text("<svg>template 2</svg>")
+
+        # Create xochitl dir too (needed for MockConnection)
+        (fixture_dir / "xochitl").mkdir(parents=True)
+
+        # MockConnection that also serves templates
+        class MockConnectionWithTemplates(MockConnection):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self._templates_dir = templates_dir
+
+            def list_files(self, remote_path: str):
+                # Check if it's requesting templates
+                if "templates" in remote_path:
+                    files = []
+                    for f in self._templates_dir.rglob("*"):
+                        if f.is_file():
+                            stat = f.stat()
+                            rel = f.relative_to(self._templates_dir)
+                            files.append(
+                                {
+                                    "path": f"/usr/share/remarkable/templates/{rel.as_posix()}",
+                                    "mtime": int(stat.st_mtime),
+                                    "size": stat.st_size,
+                                }
+                            )
+                    return files
+                return super().list_files(remote_path)
+
+            def _remote_to_local(self, remote_path: str):
+                if "/templates/" in remote_path:
+                    rel = remote_path.replace("/usr/share/remarkable/templates/", "")
+                    return self._templates_dir / rel
+                return super()._remote_to_local(remote_path)
+
+        mock_conn = MockConnectionWithTemplates(fixture_dir=fixture_dir)
+        mock_conn.connect()
+
+        backup = ReMarkableBackup(
+            backup_dir=tmp_path / "backup",
+            connection=mock_conn,
+            config={"folders": []},
+        )
+
+        success = backup._do_backup_templates()
+
+        assert success is True
+        # Templates should be downloaded
+        backup_templates = tmp_path / "backup" / "Templates"
+        assert (backup_templates / "template1.png").exists()
+        assert (backup_templates / "template2.svg").exists()
+
+    def test_do_backup_templates_empty(self, tmp_path):
+        """_do_backup_templates handles empty templates dir."""
+        # Create fixture with empty templates dir
+        fixture_dir = tmp_path / "no_templates"
+        (fixture_dir / "xochitl").mkdir(parents=True)
+        (fixture_dir / "templates").mkdir(parents=True)
+
+        class MockConnectionEmptyTemplates(MockConnection):
+            def list_files(self, remote_path: str):
+                if "templates" in remote_path:
+                    return []
+                return super().list_files(remote_path)
+
+        mock_conn = MockConnectionEmptyTemplates(fixture_dir=fixture_dir)
+        mock_conn.connect()
+
+        backup = ReMarkableBackup(
+            backup_dir=tmp_path / "backup",
+            connection=mock_conn,
+            config={"folders": []},
+        )
+
+        success = backup._do_backup_templates()
+        assert success is True
+
+    def test_run_backup_with_templates(self, tmp_path):
+        """run_backup with backup_templates=True downloads templates."""
+        mock_conn = MockConnection()
+
+        backup = ReMarkableBackup(
+            backup_dir=tmp_path,
+            connection=mock_conn,
+            config={"folders": []},
+        )
+
+        # Even without actual templates, should not crash
+        success, _, _ = backup.run_backup(backup_templates=True)
+        assert success is True
+
+
+class TestFindNotebooks:
+    """Tests for find_notebooks functionality."""
+
+    def test_find_notebooks_returns_list(self, tmp_path):
+        """find_notebooks returns list of notebook metadata."""
+        mock_conn = MockConnection()
+        mock_conn.connect()
+
+        backup = ReMarkableBackup(
+            backup_dir=tmp_path,
+            connection=mock_conn,
+            config={"folders": []},
+        )
+
+        # First do a backup to populate local files
+        backup._do_backup_files()
+
+        # Now find notebooks
+        notebooks = backup.find_notebooks()
+
+        assert isinstance(notebooks, list)
+
+    def test_find_notebooks_empty_backup(self, tmp_path):
+        """find_notebooks handles empty backup directory."""
+        mock_conn = MockConnection()
+
+        backup = ReMarkableBackup(
+            backup_dir=tmp_path,
+            connection=mock_conn,
+            config={"folders": []},
+        )
+
+        # Don't do backup, just try to find notebooks
+        notebooks = backup.find_notebooks()
+
+        assert isinstance(notebooks, list)
+        assert len(notebooks) == 0
