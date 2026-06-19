@@ -159,8 +159,10 @@ class TestReMarkableConnectionConnect:
                 mock_ssh_class.return_value = mock_ssh
                 mock_ssh.connect.side_effect = paramiko.AuthenticationException("Bad password")
 
-                conn = ReMarkableConnection(credential_store=cred_store)
-                result = conn.connect()
+                # Mock click.confirm to decline re-entering password
+                with patch("click.confirm", return_value=False):
+                    conn = ReMarkableConnection(credential_store=cred_store)
+                    result = conn.connect()
 
         assert result is False
 
