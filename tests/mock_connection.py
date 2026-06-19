@@ -21,6 +21,25 @@ XOCHITL_DIR = FIXTURES_DIR / "xochitl"
 REMOTE_XOCHITL = DEFAULT_TABLET_CONFIG.xochitl_dir
 
 
+class MockSCPClient:
+    """Mock SCP client that wraps MockConnection.get() for compatibility.
+
+    ReMarkableBackup accesses connection.scp_client.get() directly,
+    so we need this wrapper to make MockConnection work with backup tests.
+    """
+
+    def __init__(self, connection: "MockConnection"):
+        self._connection = connection
+
+    def get(self, remote_path: str, local_path: str, recursive: bool = False):
+        """Delegate to MockConnection.get()."""
+        self._connection.get(remote_path, local_path, recursive=recursive)
+
+    def close(self):
+        """No-op for mock."""
+        pass
+
+
 class MockConnection:
     """Mock replacement for ReMarkableConnection.
 
@@ -72,11 +91,14 @@ class MockConnection:
     def connect(self) -> bool:
         """Simulate a successful connection."""
         self._connected = True
+        # Create a mock SCP client that wraps our get method
+        self.scp_client = MockSCPClient(self)
         return True
 
     def disconnect(self):
         """Simulate disconnection."""
         self._connected = False
+        self.scp_client = None
 
     def execute_command(self, command: str) -> Tuple[str, str, int]:
         """Simulate executing a command on the tablet.
