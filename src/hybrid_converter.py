@@ -203,6 +203,7 @@ def merge_pdf_with_template(
     """
     try:
         from PyPDF2 import PdfReader, PdfWriter
+        from PyPDF2.generic import DecodedStreamObject, NameObject
 
         if not content_pdf.exists():
             return False
@@ -214,16 +215,21 @@ def merge_pdf_with_template(
         if template_pdf and template_pdf.exists():
             template_reader = PdfReader(str(template_pdf))
             if len(template_reader.pages) > 0:
-                # For each content page, start with a fresh copy of the template
-                for content_page in content_reader.pages:
-                    # Get a fresh copy of the template page (always use first template page)
-                    template_copy = PdfReader(str(template_pdf)).pages[0]
+                # Get template content stream once
+                template_page = template_reader.pages[0]
+                template_stream = template_page["/Contents"].get_object().get_data()
 
-                    # Merge content on top of template; expand=True ensures the
-                    # output page mediabox covers the full content area when the
-                    # content page is taller than the template (long/extended pages).
-                    template_copy.merge_page(content_page, expand=True)
-                    writer.add_page(template_copy)
+                for content_page in content_reader.pages:
+                    # Prepend template drawing (wrapped in q/Q to isolate
+                    # graphics state) before the content stream. This avoids
+                    # PyPDF2's merge_page which can produce corrupt PDFs
+                    # when combining pages with conflicting font resources.
+                    content_stream = content_page["/Contents"].get_object().get_data()
+                    combined = b"q\n" + template_stream + b"\nQ\n" + content_stream
+                    new_stream = DecodedStreamObject()
+                    new_stream.set_data(combined)
+                    content_page[NameObject("/Contents")] = new_stream
+                    writer.add_page(content_page)
             else:
                 # No template pages, just copy content
                 for page in content_reader.pages:
