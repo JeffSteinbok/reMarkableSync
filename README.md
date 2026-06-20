@@ -8,6 +8,7 @@
 [![Build Executables](https://github.com/JeffSteinbok/reMarkableSync/actions/workflows/build-executables.yml/badge.svg)](https://github.com/JeffSteinbok/reMarkableSync/actions/workflows/build-executables.yml)
 [![PyPI version](https://img.shields.io/pypi/v/remarkablesync.svg)](https://pypi.org/project/remarkablesync/)
 [![Homebrew](https://img.shields.io/badge/Homebrew-remarkablesync-FBB040?logo=homebrew)](https://github.com/JeffSteinbok/homebrew-remarkablesync)
+[![winget](https://img.shields.io/badge/winget-JeffSteinbok.reMarkableSync-blue?logo=windows)](https://github.com/microsoft/winget-pkgs/tree/master/manifests/j/JeffSteinbok/reMarkableSync)
 [![Website](https://img.shields.io/badge/Website-jeffsteinbok.github.io-blue?logo=github-pages)](https://jeffsteinbok.github.io/reMarkableSync/)
 
 A comprehensive Python toolkit for backing up reMarkable tablet notebooks, converting them to PDF, and transcribing handwriting to Markdown with AI — over USB or Wi-Fi.
