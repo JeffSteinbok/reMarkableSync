@@ -96,19 +96,17 @@ class BaseConverter(ABC):
 
             # ReMarkable 2 dimensions in PDF points (72 points per inch at 226 DPI)
             REMARKABLE_WIDTH = 447.5  # 1404 pixels / 226 DPI * 72
-            REMARKABLE_HEIGHT = 596.7  # 1872 pixels / 226 DPI * 72
 
-            # Scale the drawing to fit ReMarkable dimensions if needed
+            # Scale uniformly so the width matches ReMarkable width,
+            # but preserve the actual height (which may be taller than
+            # standard for extended/infinite-scroll pages).
             if drawing.width > 0 and drawing.height > 0:
-                scale_x = REMARKABLE_WIDTH / drawing.width
-                scale_y = REMARKABLE_HEIGHT / drawing.height
-                # Use the smaller scale to fit within bounds
-                scale = min(scale_x, scale_y)
+                scale = REMARKABLE_WIDTH / drawing.width
 
                 if abs(scale - 1.0) > 0.01:  # Only scale if significantly different
                     self.logger.debug("Scaling drawing by factor: %s", scale)
+                    drawing.height = drawing.height * scale
                     drawing.width = REMARKABLE_WIDTH
-                    drawing.height = REMARKABLE_HEIGHT
                     drawing.scale(scale, scale)
 
             # Render drawing to PDF
