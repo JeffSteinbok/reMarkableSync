@@ -203,6 +203,7 @@ def merge_pdf_with_template(
     """
     try:
         from PyPDF2 import PdfReader, PdfWriter
+        from PyPDF2.generic import DecodedStreamObject, NameObject
 
         if not content_pdf.exists():
             return False
@@ -214,14 +215,21 @@ def merge_pdf_with_template(
         if template_pdf and template_pdf.exists():
             template_reader = PdfReader(str(template_pdf))
             if len(template_reader.pages) > 0:
-                # For each content page, start with a fresh copy of the template
-                for content_page in content_reader.pages:
-                    # Get a fresh copy of the template page (always use first template page)
-                    template_copy = PdfReader(str(template_pdf)).pages[0]
+                # Get template content stream once
+                template_page = template_reader.pages[0]
+                template_stream = template_page["/Contents"].get_object().get_data()
 
-                    # Merge content on top of template
-                    template_copy.merge_page(content_page)
-                    writer.add_page(template_copy)
+                for content_page in content_reader.pages:
+                    # Prepend template drawing (wrapped in q/Q to isolate
+                    # graphics state) before the content stream. This avoids
+                    # PyPDF2's merge_page which can produce corrupt PDFs
+                    # when combining pages with conflicting font resources.
+                    content_stream = content_page["/Contents"].get_object().get_data()
+                    combined = b"q\n" + template_stream + b"\nQ\n" + content_stream
+                    new_stream = DecodedStreamObject()
+                    new_stream.set_data(combined)
+                    content_page[NameObject("/Contents")] = new_stream
+                    writer.add_page(content_page)
             else:
                 # No template pages, just copy content
                 for page in content_reader.pages:
@@ -650,7 +658,29 @@ def convert_notebook(
                 template_name = page_templates.get(page_id, "Blank")
                 if template_name and template_name != "Blank":
                     temp_template_pdf = template_temp_dir / f"template_{page_id}.pdf"
-                    if template_renderer.render_template_to_pdf(template_name, temp_template_pdf):
+
+                    # Read the actual content page dimensions so the template
+                    # pattern covers the full page — including extended/long pages
+                    # where the content height exceeds the standard ReMarkable size.
+                    page_height = None
+                    page_width = None
+                    try:
+                        from PyPDF2 import PdfReader
+
+                        content_reader = PdfReader(str(content_pdf))
+                        if content_reader.pages:
+                            content_page = content_reader.pages[0]
+                            page_height = float(content_page.mediabox.height)
+                            page_width = float(content_page.mediabox.width)
+                    except Exception:
+                        pass
+
+                    if template_renderer.render_template_to_pdf(
+                        template_name,
+                        temp_template_pdf,
+                        page_height=page_height,
+                        page_width=page_width,
+                    ):
                         if merge_pdf_with_template(content_pdf, temp_template_pdf, cached_pdf):
                             # Clean up intermediate content PDF
                             try:

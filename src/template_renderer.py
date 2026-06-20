@@ -126,7 +126,13 @@ class TemplateRenderer:
             logging.debug(f"Failed to load template {template_name}: {e}")
             return None
 
-    def render_template_to_pdf(self, template_name: str, output_pdf: Path) -> bool:
+    def render_template_to_pdf(
+        self,
+        template_name: str,
+        output_pdf: Path,
+        page_height: Optional[float] = None,
+        page_width: Optional[float] = None,
+    ) -> bool:
         """Render a template as a PDF file.
 
         This creates a simple PDF with basic template rendering.
@@ -135,66 +141,92 @@ class TemplateRenderer:
         Args:
             template_name: Name of the template to render
             output_pdf: Path where the PDF should be saved
+            page_height: Actual page height in PDF points. When the page is
+                taller than the standard ReMarkable height (e.g. a long/extended
+                page), passing the real height ensures the template pattern fills
+                the entire page rather than stopping at the standard boundary.
+                Defaults to REMARKABLE_HEIGHT.
+            page_width: Actual page width in PDF points. Defaults to
+                REMARKABLE_WIDTH.
 
         Returns:
             bool: True if successful, False otherwise
         """
+        height = page_height if page_height is not None else self.REMARKABLE_HEIGHT
+        width = page_width if page_width is not None else self.REMARKABLE_WIDTH
+
         if not template_name or template_name == "Blank":
             # For blank templates, create a blank PDF
-            return self._create_blank_pdf(output_pdf)
+            return self._create_blank_pdf(output_pdf, page_height=height, page_width=width)
 
         template_data = self.load_template(template_name)
         if not template_data:
             logging.debug(f"Could not load template {template_name}, using blank")
-            return self._create_blank_pdf(output_pdf)
+            return self._create_blank_pdf(output_pdf, page_height=height, page_width=width)
 
         try:
-            # Create PDF with ReMarkable dimensions
-            c = canvas.Canvas(
-                str(output_pdf), pagesize=(self.REMARKABLE_WIDTH, self.REMARKABLE_HEIGHT)
-            )
+            # Create PDF with actual page dimensions
+            c = canvas.Canvas(str(output_pdf), pagesize=(width, height))
 
             # Basic rendering: draw grid lines if it's a grid template
             if "Grid" in template_name or "grid" in template_name.lower():
-                self._render_grid(c, template_data)
+                self._render_grid(c, template_data, page_height=height, page_width=width)
             elif "Lines" in template_name or "lines" in template_name.lower():
-                self._render_lines(c, template_data)
+                self._render_lines(c, template_data, page_height=height, page_width=width)
             elif "Dots" in template_name or "dots" in template_name.lower():
-                self._render_dots(c, template_data)
+                self._render_dots(c, template_data, page_height=height, page_width=width)
 
             c.save()
             return output_pdf.exists()
 
         except Exception as e:
             logging.debug(f"Failed to render template {template_name}: {e}")
-            return self._create_blank_pdf(output_pdf)
+            return self._create_blank_pdf(output_pdf, page_height=height, page_width=width)
 
-    def _create_blank_pdf(self, output_pdf: Path) -> bool:
-        """Create a blank PDF with ReMarkable dimensions.
+    def _create_blank_pdf(
+        self,
+        output_pdf: Path,
+        page_height: Optional[float] = None,
+        page_width: Optional[float] = None,
+    ) -> bool:
+        """Create a blank PDF with the given page dimensions.
 
         Args:
             output_pdf: Path where the PDF should be saved
+            page_height: Page height in PDF points (defaults to REMARKABLE_HEIGHT)
+            page_width: Page width in PDF points (defaults to REMARKABLE_WIDTH)
 
         Returns:
             bool: True if successful
         """
+        height = page_height if page_height is not None else self.REMARKABLE_HEIGHT
+        width = page_width if page_width is not None else self.REMARKABLE_WIDTH
         try:
-            c = canvas.Canvas(
-                str(output_pdf), pagesize=(self.REMARKABLE_WIDTH, self.REMARKABLE_HEIGHT)
-            )
+            c = canvas.Canvas(str(output_pdf), pagesize=(width, height))
+            c.showPage()
             c.save()
             return True
         except Exception as e:
             logging.debug(f"Failed to create blank PDF: {e}")
             return False
 
-    def _render_grid(self, c: canvas.Canvas, template_data: Dict):
+    def _render_grid(
+        self,
+        c: canvas.Canvas,
+        template_data: Dict,
+        page_height: Optional[float] = None,
+        page_width: Optional[float] = None,
+    ):
         """Render a grid template pattern.
 
         Args:
             c: ReportLab canvas to draw on
             template_data: Template data dictionary
+            page_height: Page height in PDF points (defaults to REMARKABLE_HEIGHT)
+            page_width: Page width in PDF points (defaults to REMARKABLE_WIDTH)
         """
+        height = page_height if page_height is not None else self.REMARKABLE_HEIGHT
+        width = page_width if page_width is not None else self.REMARKABLE_WIDTH
         # Set light gray color for grid
         c.setStrokeColorRGB(0.85, 0.85, 0.85)
         c.setLineWidth(0.3)
@@ -212,23 +244,34 @@ class TemplateRenderer:
 
         # Draw vertical lines
         x = 0
-        while x <= self.REMARKABLE_WIDTH:
-            c.line(x, 0, x, self.REMARKABLE_HEIGHT)
+        while x <= width:
+            c.line(x, 0, x, height)
             x += grid_size_points
 
         # Draw horizontal lines
         y = 0
-        while y <= self.REMARKABLE_HEIGHT:
-            c.line(0, y, self.REMARKABLE_WIDTH, y)
+        while y <= height:
+            c.line(0, y, width, y)
             y += grid_size_points
 
-    def _render_lines(self, c: canvas.Canvas, template_data: Dict):
+    def _render_lines(
+        self,
+        c: canvas.Canvas,
+        template_data: Dict,
+        page_height: Optional[float] = None,
+        page_width: Optional[float] = None,
+    ):
         """Render a lined template pattern.
 
         Args:
             c: ReportLab canvas to draw on
             template_data: Template data dictionary
+            page_height: Page height in PDF points (defaults to REMARKABLE_HEIGHT)
+            page_width: Page width in PDF points (defaults to REMARKABLE_WIDTH)
         """
+        height = page_height if page_height is not None else self.REMARKABLE_HEIGHT
+        width = page_width if page_width is not None else self.REMARKABLE_WIDTH
+
         # Set light gray color for lines
         c.setStrokeColorRGB(0.85, 0.85, 0.85)
         c.setLineWidth(0.3)
@@ -247,17 +290,28 @@ class TemplateRenderer:
 
         # Draw horizontal lines
         y = 0
-        while y <= self.REMARKABLE_HEIGHT:
-            c.line(0, y, self.REMARKABLE_WIDTH, y)
+        while y <= height:
+            c.line(0, y, width, y)
             y += line_spacing_points
 
-    def _render_dots(self, c: canvas.Canvas, template_data: Dict):
+    def _render_dots(
+        self,
+        c: canvas.Canvas,
+        template_data: Dict,
+        page_height: Optional[float] = None,
+        page_width: Optional[float] = None,
+    ):
         """Render a dot grid template pattern.
 
         Args:
             c: ReportLab canvas to draw on
             template_data: Template data dictionary
+            page_height: Page height in PDF points (defaults to REMARKABLE_HEIGHT)
+            page_width: Page width in PDF points (defaults to REMARKABLE_WIDTH)
         """
+        height = page_height if page_height is not None else self.REMARKABLE_HEIGHT
+        width = page_width if page_width is not None else self.REMARKABLE_WIDTH
+
         # Set light gray color for dots
         c.setFillColorRGB(0.75, 0.75, 0.75)
 
@@ -277,9 +331,9 @@ class TemplateRenderer:
 
         # Draw dot grid
         y = 0
-        while y <= self.REMARKABLE_HEIGHT:
+        while y <= height:
             x = 0
-            while x <= self.REMARKABLE_WIDTH:
+            while x <= width:
                 c.circle(x, y, dot_radius, fill=1, stroke=0)
                 x += dot_spacing_points
             y += dot_spacing_points
