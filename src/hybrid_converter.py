@@ -219,8 +219,10 @@ def merge_pdf_with_template(
                     # Get a fresh copy of the template page (always use first template page)
                     template_copy = PdfReader(str(template_pdf)).pages[0]
 
-                    # Merge content on top of template
-                    template_copy.merge_page(content_page)
+                    # Merge content on top of template; expand=True ensures the
+                    # output page mediabox covers the full content area when the
+                    # content page is taller than the template (long/extended pages).
+                    template_copy.merge_page(content_page, expand=True)
                     writer.add_page(template_copy)
             else:
                 # No template pages, just copy content
@@ -650,7 +652,29 @@ def convert_notebook(
                 template_name = page_templates.get(page_id, "Blank")
                 if template_name and template_name != "Blank":
                     temp_template_pdf = template_temp_dir / f"template_{page_id}.pdf"
-                    if template_renderer.render_template_to_pdf(template_name, temp_template_pdf):
+
+                    # Read the actual content page dimensions so the template
+                    # pattern covers the full page — including extended/long pages
+                    # where the content height exceeds the standard ReMarkable size.
+                    page_height = None
+                    page_width = None
+                    try:
+                        from PyPDF2 import PdfReader
+
+                        content_reader = PdfReader(str(content_pdf))
+                        if content_reader.pages:
+                            content_page = content_reader.pages[0]
+                            page_height = float(content_page.mediabox.height)
+                            page_width = float(content_page.mediabox.width)
+                    except Exception:
+                        pass
+
+                    if template_renderer.render_template_to_pdf(
+                        template_name,
+                        temp_template_pdf,
+                        page_height=page_height,
+                        page_width=page_width,
+                    ):
                         if merge_pdf_with_template(content_pdf, temp_template_pdf, cached_pdf):
                             # Clean up intermediate content PDF
                             try:
