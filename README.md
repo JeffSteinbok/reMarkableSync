@@ -14,16 +14,16 @@
 A comprehensive Python toolkit for backing up reMarkable tablet notebooks, converting them to PDF, and transcribing handwriting to Markdown with AI — over USB or Wi-Fi.
 
 > [!IMPORTANT]
-> Tested on reMarkable 2. Compatibility with reMarkable 1 is not guaranteed.
+> Tested on reMarkable 2 and reMarkable Paper Pro. Compatibility with reMarkable 1 is not guaranteed.
 >
-> AI handwriting-to-text features require a **GitHub Copilot** or **Claude** (Anthropic) account. Support for additional providers can be added as needed.
+> AI handwriting-to-text features work with **GitHub Copilot**, **Claude** (Anthropic), or **TrOCR** (local, offline — no account or API key required).
 
 ## Features
 
 - **USB & Wi-Fi sync** — connect via cable or wirelessly over your local network
 - **Incremental backup** — only downloads files that have changed (tracked by size, mtime, and MD5)
 - **PDF conversion** — v5 and v6 .rm formats with template backgrounds, folder hierarchy preserved
-- **AI handwriting recognition** — send page images to GitHub Models (GPT-4o) or Claude for transcription
+- **AI handwriting recognition** — send page images to GitHub Models (GPT-4o), Claude, or run locally with TrOCR (no API key needed)
 - **Markdown export** — each notebook becomes a `.md` file with YAML frontmatter and embedded page images
 - **Watch mode** — automatic periodic sync with system-tray status icon and run-at-startup option
 - **Secure credential storage** — SSH password and AI tokens stored in your system keyring
@@ -57,7 +57,7 @@ The wizard walks you through:
 | **Backup directory** | `<AppData>/remarkablesync/backup` (internal sync data) |
 | **PDF output** | `~/Documents/reMarkableSync/PDF` |
 | **Markdown output** | `~/Documents/reMarkableSync/Markdown` |
-| **AI provider** | GitHub Models (free) or Claude (requires API key) |
+| **AI provider** | GitHub Models (free with Copilot), Claude (requires API key), or TrOCR (local, no account needed) |
 | **AI token** | Stored securely in system keyring |
 | **Folders** | Choose which tablet folders to sync (or all) |
 
