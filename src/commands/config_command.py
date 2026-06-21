@@ -347,8 +347,12 @@ def _run_wizard(current, inquirer) -> int:
         ai_provider = inquirer.select(
             message="AI provider for handwriting recognition:",
             choices=[
-                {"name": "GitHub Models", "value": "github"},
+                {"name": "GitHub Models  (requires GitHub Copilot token)", "value": "github"},
                 {"name": "Claude / Anthropic  (requires API key)", "value": "claude"},
+                {
+                    "name": "TrOCR  (local, offline — no API key, requires transformers+torch)",
+                    "value": "trocr",
+                },
             ],
             default=ai_provider,
         ).execute()
@@ -358,7 +362,25 @@ def _run_wizard(current, inquirer) -> int:
             return 0
 
         # Authenticate first so we can fetch models
-        if ai_provider == "github":
+        if ai_provider == "trocr":
+            from src.ai.trocr_provider import _DEFAULT_MODEL as TROCR_DEFAULT_MODEL
+
+            click.echo()
+            click.secho("  TrOCR runs entirely on your local machine.", fg="yellow")
+            click.secho(
+                "  The model (~300 MB) is downloaded automatically on first use.", fg="yellow"
+            )
+            click.echo()
+            default_model = ai_model if ai_model else TROCR_DEFAULT_MODEL
+            ai_model = (
+                inquirer.text(
+                    message="TrOCR model (HuggingFace ID):",
+                    default=default_model,
+                ).execute()
+                or default_model
+            )
+
+        elif ai_provider == "github":
             from src.keyring_store import KEY_GITHUB_TOKEN, get_secret, set_secret
 
             existing = get_secret(KEY_GITHUB_TOKEN)
