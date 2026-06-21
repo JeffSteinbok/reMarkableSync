@@ -10,6 +10,7 @@ from .base_provider import AIProviderError, AIRateLimitError, BaseAIProvider
 from .claude_provider import ClaudeProvider
 from .github_copilot_provider import GitHubCopilotProvider
 from .github_models_provider import GitHubModelsProvider
+from .trocr_provider import TrOCRProvider
 
 _REGISTRY: dict[str, type] = {
     "claude": ClaudeProvider,
@@ -18,6 +19,8 @@ _REGISTRY: dict[str, type] = {
     "github_copilot": GitHubCopilotProvider,
     "github_models": GitHubModelsProvider,  # Legacy OpenAI-compatible
     "openai": GitHubModelsProvider,
+    "trocr": TrOCRProvider,  # Local offline OCR, no API key required
+    "local": TrOCRProvider,
 }
 
 
@@ -50,5 +53,6 @@ __all__ = [
     "ClaudeProvider",
     "GitHubCopilotProvider",
     "GitHubModelsProvider",
+    "TrOCRProvider",
     "get_provider",
 ]
