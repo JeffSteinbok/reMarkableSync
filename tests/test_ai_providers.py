@@ -267,7 +267,7 @@ class TestTrOCRProvider:
         assert p.model_name == "microsoft/trocr-base-handwritten"
 
     def test_custom_model_name(self):
-        p = TrOCRProvider(model="microsoft/trocr-large-handwritten")
+        p = TrOCRProvider(model_name="microsoft/trocr-large-handwritten")
         assert p.model_name == "microsoft/trocr-large-handwritten"
 
     def test_load_model_sets_unavailable_on_import_error(self):

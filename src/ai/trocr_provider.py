@@ -37,15 +37,15 @@ class TrOCRProvider(BaseAIProvider):
     raw text unchanged.
     """
 
-    def __init__(self, model: str = "", device: str = "cpu"):
+    def __init__(self, model_name: str = "", device: str = "cpu"):
         """Initialise the TrOCR provider.
 
         Args:
-            model: HuggingFace model identifier.  Defaults to
+            model_name: HuggingFace model identifier.  Defaults to
                 ``microsoft/trocr-base-handwritten``.
             device: PyTorch device string, e.g. ``"cpu"`` or ``"cuda"``.
         """
-        self.model_name = model or _DEFAULT_MODEL
+        self.model_name = model_name or _DEFAULT_MODEL
         self.device = device
         self._processor = None
         self._model = None
