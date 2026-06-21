@@ -364,6 +364,43 @@
             background: var(--night-light);
         }
 
+        .compatibility-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.25rem;
+        }
+
+        .compatibility-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+
+        .compatibility-card h3 {
+            font-size: 1rem;
+            margin-bottom: 0.75rem;
+            color: var(--text);
+        }
+
+        .compatibility-status {
+            display: inline-block;
+            margin-bottom: 0.75rem;
+            padding: 0.25rem 0.6rem;
+            border-radius: 999px;
+            background: var(--surface-light);
+            border: 1px solid var(--border);
+            color: var(--accent);
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .compatibility-card p {
+            font-size: 0.92rem;
+            color: var(--text-dim);
+            margin-bottom: 0;
+        }
+
         .install-options {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -597,6 +634,28 @@
                 <div class="feature-item"><strong>AI Handwriting Recognition</strong> — transcribe handwriting with GitHub Copilot or Claude</div>
                 <div class="feature-item"><strong>Markdown Export</strong> — each notebook page becomes a .md file with frontmatter and images</div>
                 <div class="feature-item"><strong>Watch Mode</strong> — automatic periodic sync with a system-tray icon</div>
+            </div>
+        </div>
+    </section>
+
+    <section class="container">
+        <h2>Device Compatibility</h2>
+        <p class="section-sub">Current device support and the caveats to know before you set things up.</p>
+        <div class="compatibility-grid">
+            <div class="compatibility-card">
+                <h3>reMarkable 2</h3>
+                <span class="compatibility-status">Known to work</span>
+                <p>The primary device used for testing and the safest path for a straightforward setup.</p>
+            </div>
+            <div class="compatibility-card">
+                <h3>reMarkable Paper Pro</h3>
+                <span class="compatibility-status">Known to work with setup caveat</span>
+                <p>SSH must be enabled through developer mode, and enabling developer mode currently requires a factory reset.</p>
+            </div>
+            <div class="compatibility-card">
+                <h3>reMarkable 1</h3>
+                <span class="compatibility-status">Not currently verified</span>
+                <p>Compatibility is not guaranteed until it has been tested directly on reMarkable 1 hardware.</p>
             </div>
         </div>
     </section>

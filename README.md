@@ -14,9 +14,20 @@
 A comprehensive Python toolkit for backing up reMarkable tablet notebooks, converting them to PDF, and transcribing handwriting to Markdown with AI — over USB or Wi-Fi.
 
 > [!IMPORTANT]
-> Tested on reMarkable 2. Compatibility with reMarkable 1 is not guaranteed.
+> Known device support:
+> - **reMarkable 2** — confirmed working and the primary device tested
+> - **reMarkable Paper Pro** — expected to work, but SSH must be enabled through developer mode, which currently requires a factory reset
+> - **reMarkable 1** — not currently verified; compatibility is not guaranteed
 >
 > AI handwriting-to-text features require a **GitHub Copilot** or **Claude** (Anthropic) account. Support for additional providers can be added as needed.
+
+## Device Compatibility
+
+| Device | Status | Caveats |
+|--------|--------|---------|
+| **reMarkable 2** | Known to work | This is the primary device used for testing. |
+| **reMarkable Paper Pro** | Known to work with setup caveat | SSH access must be enabled through developer mode, and enabling developer mode currently requires a factory reset. |
+| **reMarkable 1** | Not currently verified | Compatibility is not guaranteed until it has been tested directly. |
 
 ## Features
 
