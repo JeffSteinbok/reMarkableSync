@@ -38,6 +38,14 @@ A comprehensive Python toolkit for backing up reMarkable tablet notebooks, conve
 - **Watch mode** — automatic periodic sync with system-tray status icon and run-at-startup option
 - **Secure credential storage** — SSH password and AI tokens stored in your system keyring
 
+## Supported AI Providers
+
+| Provider | Description | API Key |
+|----------|-------------|---------|
+| **GitHub Copilot** | Uses GPT-4o via GitHub Models. Free for Copilot subscribers. | Automatic via GitHub login |
+| **Google Gemini** | Gemini 2.5 Flash/Pro models. Free tier available. | [Get API key](https://aistudio.google.com/apikey) |
+| **Claude** | Anthropic's Claude models. Requires paid API access. | [Get API key](https://console.anthropic.com/) |
+
 ## Quick Start
 
 ### 1. Install
