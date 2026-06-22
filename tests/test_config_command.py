@@ -271,6 +271,7 @@ def test_run_config_command_without_ocr_preserves_embed_images():
             "/tmp/pdf",  # pdf dir
             "",  # pre_sync_command
             "",  # post_sync_command
+            False,  # connect to tablet to select folders?
         ]
     )
     fake_inquirer_module = types.ModuleType("InquirerPy")

@@ -149,7 +149,7 @@ class ReMarkableConnection:
         if not self.password:
             saved_password = self.get_saved_password()
             if saved_password:
-                print("Using saved SSH password...")
+                print("  Using saved SSH password...")
                 self.password = saved_password
                 return self.password
 

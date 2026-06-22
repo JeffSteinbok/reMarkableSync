@@ -30,7 +30,7 @@ class TestKeyringAvailable:
                 mock_kr.get_password.return_value = "my-token"
                 result = keyring_store.get_secret("github_token")
         assert result == "my-token"
-        mock_kr.get_password.assert_called_once_with("RemarkableSync", "github_token")
+        mock_kr.get_password.assert_called_once_with("remarkablesync", "github_token")
 
     def test_get_secret_returns_empty_on_none(self):
         with patch.object(keyring_store, "KEYRING_AVAILABLE", True):
@@ -51,7 +51,7 @@ class TestKeyringAvailable:
             with patch.object(keyring_store, "keyring") as mock_kr:
                 result = keyring_store.set_secret("github_token", "tok123")
         assert result is True
-        mock_kr.set_password.assert_called_once_with("RemarkableSync", "github_token", "tok123")
+        mock_kr.set_password.assert_called_once_with("remarkablesync", "github_token", "tok123")
 
     def test_set_secret_handles_exception(self):
         with patch.object(keyring_store, "KEYRING_AVAILABLE", True):
@@ -65,7 +65,7 @@ class TestKeyringAvailable:
             with patch.object(keyring_store, "keyring") as mock_kr:
                 result = keyring_store.delete_secret("github_token")
         assert result is True
-        mock_kr.delete_password.assert_called_once_with("RemarkableSync", "github_token")
+        mock_kr.delete_password.assert_called_once_with("remarkablesync", "github_token")
 
     def test_delete_secret_handles_exception(self):
         with patch.object(keyring_store, "KEYRING_AVAILABLE", True):
@@ -79,7 +79,7 @@ class TestConstants:
     """Verify module-level constants."""
 
     def test_service_name(self):
-        assert keyring_store.SERVICE == "RemarkableSync"
+        assert keyring_store.SERVICE == "remarkablesync"
 
     def test_key_constants(self):
         assert keyring_store.KEY_GITHUB_TOKEN == "github_token"

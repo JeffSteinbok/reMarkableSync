@@ -632,33 +632,31 @@
                 <div class="feature-item"><strong>USB & Wi-Fi Sync</strong> — connect via cable or wirelessly over your local network</div>
                 <div class="feature-item"><strong>Incremental Backup</strong> — only downloads files that have changed</div>
                 <div class="feature-item"><strong>PDF Conversion</strong> — full v5 and v6 .rm support with template backgrounds</div>
-                <div class="feature-item"><strong>AI Handwriting Recognition</strong> — transcribe handwriting with GitHub Copilot, Claude, or TrOCR (local, no API key)</div>
+                <div class="feature-item"><strong>AI Handwriting Recognition</strong> — transcribe handwriting with GitHub Copilot, Claude, or Google Gemini</div>
                 <div class="feature-item"><strong>Markdown Export</strong> — each notebook page becomes a .md file with frontmatter and images</div>
                 <div class="feature-item"><strong>Watch Mode</strong> — automatic periodic sync with a system-tray icon</div>
             </div>
         </div>
     </section>
 
-    <section class="container">
+    <section class="container" style="padding: 3rem 0;">
         <h2>Device Compatibility</h2>
         <p class="section-sub">Current device support and the caveats to know before you set things up.</p>
-        <div class="compatibility-grid">
-            <div class="compatibility-card">
-                <h3>reMarkable 2</h3>
-                <span class="compatibility-status">Known to work</span>
-                <p>The primary device used for testing and the safest path for a straightforward setup.</p>
-            </div>
-            <div class="compatibility-card">
-                <h3>reMarkable Paper Pro</h3>
-                <span class="compatibility-status">Known to work with setup caveat</span>
-                <p>SSH must be enabled through developer mode, and enabling developer mode currently requires a factory reset.</p>
-            </div>
-            <div class="compatibility-card">
-                <h3>reMarkable 1</h3>
-                <span class="compatibility-status">Not currently verified</span>
-                <p>Compatibility is not guaranteed until it has been tested directly on reMarkable 1 hardware.</p>
-            </div>
-        </div>
+        <ul style="text-align: left; max-width: 700px; margin: 0 auto; line-height: 1.8;">
+            <li><strong>reMarkable 2</strong> — Known to work. The primary device used for testing.</li>
+            <li><strong>reMarkable Paper Pro</strong> — Known to work with setup caveat. SSH must be enabled through developer mode, which currently requires a factory reset.</li>
+            <li><strong>reMarkable 1</strong> — Not currently verified. Compatibility is not guaranteed until tested directly.</li>
+        </ul>
+    </section>
+
+    <section class="container" style="padding: 3rem 0;">
+        <h2>Supported AI Providers</h2>
+        <p class="section-sub">Choose the AI provider that works best for you.</p>
+        <ul style="text-align: left; max-width: 700px; margin: 0 auto; line-height: 1.8;">
+            <li><strong>GitHub Copilot</strong> — Uses GPT-4o via GitHub Models. Free for Copilot subscribers, automatic login.</li>
+            <li><strong>Google Gemini</strong> — Gemini 2.5 Flash/Pro models. Free tier available. <a href="https://aistudio.google.com/apikey">Get API key</a></li>
+            <li><strong>Claude</strong> — Anthropic's Claude models. Requires paid API access. <a href="https://console.anthropic.com/">Get API key</a></li>
+        </ul>
     </section>
 
     <!-- ── Install ── -->
@@ -683,14 +681,14 @@
     </section>
 
     <!-- ── Using ── -->
-    <section id="using" class="container" style="padding-bottom: 6rem;">
+    <section id="using" class="container" style="padding-top: 3rem; padding-bottom: 6rem;">
         <h2>Getting Started</h2>
         <div class="using-steps">
             <div class="using-step">
                 <div class="step-number">1</div>
                 <div class="step-content">
                     <h3>Configure</h3>
-                    <p>Run the setup wizard to connect to your tablet and choose an AI provider (GitHub Copilot, Claude, or local TrOCR).</p>
+                    <p>Run the setup wizard to connect to your tablet and choose an AI provider (GitHub Copilot, Claude, or Google Gemini).</p>
                     <div class="install-option" style="margin-top: 0.75rem;">
                         <code>reMarkableSync config</code>
                         <button class="copy-btn" data-copy="reMarkableSync config">Copy</button>

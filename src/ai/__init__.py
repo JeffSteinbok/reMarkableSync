@@ -10,6 +10,7 @@ from .base_provider import AIProviderError, AIRateLimitError, BaseAIProvider
 from .claude_provider import ClaudeProvider
 from .github_copilot_provider import GitHubCopilotProvider
 from .github_models_provider import GitHubModelsProvider
+from .google_provider import GoogleProvider
 
 _REGISTRY: dict[str, type] = {
     "claude": ClaudeProvider,
@@ -18,6 +19,8 @@ _REGISTRY: dict[str, type] = {
     "github_copilot": GitHubCopilotProvider,
     "github_models": GitHubModelsProvider,  # Legacy OpenAI-compatible
     "openai": GitHubModelsProvider,
+    "google": GoogleProvider,
+    "gemini": GoogleProvider,
 }
 
 
@@ -26,7 +29,8 @@ def get_provider(provider_name: str, **kwargs: Any) -> BaseAIProvider:
 
     Args:
         provider_name: One of ``"claude"``, ``"anthropic"``, ``"github"``,
-            ``"github_copilot"``, ``"github_models"``, or ``"openai"``.
+            ``"github_copilot"``, ``"github_models"``, ``"openai"``,
+            ``"google"``, or ``"gemini"``.
         **kwargs: Keyword arguments forwarded to the provider constructor
             (e.g. ``api_key``, ``model``).
 
@@ -50,5 +54,6 @@ __all__ = [
     "ClaudeProvider",
     "GitHubCopilotProvider",
     "GitHubModelsProvider",
+    "GoogleProvider",
     "get_provider",
 ]
