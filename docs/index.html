@@ -639,26 +639,14 @@
         </div>
     </section>
 
-    <section class="container">
+    <section class="container" style="padding: 3rem 0;">
         <h2>Device Compatibility</h2>
         <p class="section-sub">Current device support and the caveats to know before you set things up.</p>
-        <div class="compatibility-grid">
-            <div class="compatibility-card">
-                <h3>reMarkable 2</h3>
-                <span class="compatibility-status">Known to work</span>
-                <p>The primary device used for testing and the safest path for a straightforward setup.</p>
-            </div>
-            <div class="compatibility-card">
-                <h3>reMarkable Paper Pro</h3>
-                <span class="compatibility-status">Known to work with setup caveat</span>
-                <p>SSH must be enabled through developer mode, and enabling developer mode currently requires a factory reset.</p>
-            </div>
-            <div class="compatibility-card">
-                <h3>reMarkable 1</h3>
-                <span class="compatibility-status">Not currently verified</span>
-                <p>Compatibility is not guaranteed until it has been tested directly on reMarkable 1 hardware.</p>
-            </div>
-        </div>
+        <ul style="text-align: left; max-width: 700px; margin: 0 auto; line-height: 1.8;">
+            <li><strong>reMarkable 2</strong> — Known to work. The primary device used for testing.</li>
+            <li><strong>reMarkable Paper Pro</strong> — Known to work with setup caveat. SSH must be enabled through developer mode, which currently requires a factory reset.</li>
+            <li><strong>reMarkable 1</strong> — Not currently verified. Compatibility is not guaranteed until tested directly.</li>
+        </ul>
     </section>
 
     <!-- ── Install ── -->
