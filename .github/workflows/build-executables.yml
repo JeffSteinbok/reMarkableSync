@@ -18,10 +18,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.13'
 
@@ -43,14 +43,14 @@ jobs:
           powershell Compress-Archive -Path reMarkableSync-Windows -DestinationPath reMarkableSync-Windows.zip
 
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: reMarkableSync-Windows
           path: reMarkableSync-Windows.zip
 
       - name: Upload to Release
         if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: reMarkableSync-Windows.zip
         env:
@@ -61,10 +61,10 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.13'
 
@@ -97,14 +97,14 @@ jobs:
           (cd reMarkableSync-macOS && zip -r ../reMarkableSync-macOS.zip .)
 
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: reMarkableSync-macOS
           path: reMarkableSync-macOS.zip
 
       - name: Upload to Release
         if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: reMarkableSync-macOS.zip
         env:
