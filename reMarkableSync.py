@@ -353,7 +353,7 @@ def sync(
 @click.option(
     "--ai-provider",
     default=None,
-    type=click.Choice(["", "claude", "anthropic", "github", "github_models"], case_sensitive=False),
+    type=click.Choice(["", "claude", "anthropic", "github", "github_models", "google", "gemini"], case_sensitive=False),
     help="AI provider for handwriting recognition",
 )
 @click.option("--ai-model", default="", help="Override AI model (provider-specific)")
@@ -446,10 +446,17 @@ def md(
     if not ai_model:
         ai_model = cfg.get("ai_model", "")
     if not ai_api_key:
-        from src.keyring_store import KEY_CLAUDE_API_KEY, KEY_GITHUB_TOKEN, get_secret
+        from src.keyring_store import (
+            KEY_CLAUDE_API_KEY,
+            KEY_GITHUB_TOKEN,
+            KEY_GOOGLE_API_KEY,
+            get_secret,
+        )
 
         if ai_provider == "claude":
             ai_api_key = get_secret(KEY_CLAUDE_API_KEY)
+        elif ai_provider in ("google", "gemini"):
+            ai_api_key = get_secret(KEY_GOOGLE_API_KEY)
         else:
             ai_api_key = get_secret(KEY_GITHUB_TOKEN)
 
@@ -561,7 +568,7 @@ def config(show: bool, log_level: str):
 )
 @click.option(
     "--ai-provider",
-    type=click.Choice(["", "claude", "anthropic", "github", "github_models"]),
+    type=click.Choice(["", "claude", "anthropic", "github", "github_models", "google", "gemini"]),
     default=None,
     help="AI provider for handwriting recognition",
 )
@@ -627,10 +634,17 @@ def test_md(
     if not ai_model:
         ai_model = cfg.get("ai_model", "")
     if not ai_api_key:
-        from src.keyring_store import KEY_CLAUDE_API_KEY, KEY_GITHUB_TOKEN, get_secret
+        from src.keyring_store import (
+            KEY_CLAUDE_API_KEY,
+            KEY_GITHUB_TOKEN,
+            KEY_GOOGLE_API_KEY,
+            get_secret,
+        )
 
         if ai_provider == "claude":
             ai_api_key = get_secret(KEY_CLAUDE_API_KEY)
+        elif ai_provider in ("google", "gemini"):
+            ai_api_key = get_secret(KEY_GOOGLE_API_KEY)
         else:
             ai_api_key = get_secret(KEY_GITHUB_TOKEN)
 

@@ -338,16 +338,19 @@ def _run_wizard(current, inquirer) -> int:
             return 0
 
     # 7. AI provider selection (only if OCR is enabled)
-    ai_provider = current.get("ai_provider", "github")
+    previous_provider = current.get("ai_provider", "github")
+    ai_provider = previous_provider
     ai_model = current.get("ai_model", "")
     github_token = ""
     claude_api_key = ""
+    google_api_key = ""
 
     if ocr_enabled:
         ai_provider = inquirer.select(
             message="AI provider for handwriting recognition:",
             choices=[
-                {"name": "GitHub Models", "value": "github"},
+                {"name": "GitHub Models  (free with Copilot)", "value": "github"},
+                {"name": "Google Gemini  (free tier available)", "value": "google"},
                 {"name": "Claude / Anthropic  (requires API key)", "value": "claude"},
             ],
             default=ai_provider,
@@ -356,6 +359,10 @@ def _run_wizard(current, inquirer) -> int:
         if ai_provider is None:
             _print_status_message("Aborted. No changes saved.", success=False)
             return 0
+
+        # Clear model if provider changed
+        if ai_provider != previous_provider:
+            ai_model = ""
 
         # Authenticate first so we can fetch models
         if ai_provider == "github":
@@ -475,6 +482,67 @@ def _run_wizard(current, inquirer) -> int:
                 or default_model
             )
 
+        elif ai_provider == "google":
+            from src.keyring_store import KEY_GOOGLE_API_KEY, get_secret, set_secret
+
+            existing = get_secret(KEY_GOOGLE_API_KEY)
+            if existing:
+                click.echo("  Google API key: (saved in keyring)")
+                change = inquirer.confirm(
+                    message="Change Google API key?",
+                    default=False,
+                ).execute()
+                if change:
+                    google_api_key = (
+                        inquirer.secret(
+                            message="Google AI API key:",
+                            transformer=lambda _: "••••••••" if _ else "(empty)",
+                        ).execute()
+                        or ""
+                    )
+                    if google_api_key:
+                        set_secret(KEY_GOOGLE_API_KEY, google_api_key)
+                else:
+                    google_api_key = existing
+            else:
+                click.echo()
+                click.secho("  To use Google Gemini for handwriting recognition:", fg="yellow")
+                click.echo()
+                click.secho("  1. Go to  https://aistudio.google.com/apikey", fg="yellow")
+                click.secho("  2. Click 'Create API Key'", fg="yellow")
+                click.secho("  3. Copy the key and paste it below", fg="yellow")
+                click.echo()
+                click.secho("  Free tier: 15 requests/minute, 1500/day", fg="cyan")
+                click.echo()
+                google_api_key = (
+                    inquirer.secret(
+                        message="Google AI API key:",
+                        transformer=lambda _: "••••••••" if _ else "(empty)",
+                    ).execute()
+                    or ""
+                )
+                if google_api_key:
+                    set_secret(KEY_GOOGLE_API_KEY, google_api_key)
+                else:
+                    click.secho("  API key is required for Google provider.", fg="red")
+                    return 1
+
+            # Model selection for Google
+            model_choices = [
+                {"name": "Gemini 2.5 Flash  (fast, free tier)", "value": "gemini-2.5-flash"},
+                {
+                    "name": "Gemini 2.5 Flash Lite  (fastest, free tier)",
+                    "value": "gemini-2.5-flash-lite",
+                },
+                {"name": "Gemini 2.5 Pro  (best quality)", "value": "gemini-2.5-pro"},
+            ]
+            default_model = ai_model if ai_model else "gemini-2.5-flash"
+            ai_model = inquirer.select(
+                message="Gemini model:",
+                choices=model_choices,
+                default=default_model,
+            ).execute()
+
     # 8a. Custom OCR instructions (optional)
     ocr_custom_instructions = ""
     if ocr_enabled:
@@ -526,31 +594,37 @@ def _run_wizard(current, inquirer) -> int:
 
     # 9. Connect to tablet and select folders
     click.echo()
-    click.echo("  Connecting to tablet to discover folders...")
+    connect_for_folders = inquirer.confirm(
+        message="Connect to tablet to select folders?",
+        default=True,
+    ).execute()
 
-    folder_choices = _get_folder_choices_live(
-        connection_mode,
-        password,
-        wifi_host,
-        pre_sync_command=pre_sync_command,
-        post_sync_command=post_sync_command,
-    )
     folders: List[str] = []
+    if connect_for_folders:
+        click.echo("  Connecting to tablet to discover folders...")
 
-    if folder_choices:
-        saved_folders = current.get("folders", [])
-        # Pre-check previously selected folders
-        for choice in folder_choices:
-            if isinstance(choice, dict) and choice.get("value") in saved_folders:
-                choice["enabled"] = True
+        folder_choices = _get_folder_choices_live(
+            connection_mode,
+            password,
+            wifi_host,
+            pre_sync_command=pre_sync_command,
+            post_sync_command=post_sync_command,
+        )
 
-        folders = inquirer.checkbox(
-            message="Folders to sync (empty = sync all):",
-            choices=folder_choices,
-        ).execute()
+        if folder_choices:
+            saved_folders = current.get("folders", [])
+            # Pre-check previously selected folders
+            for choice in folder_choices:
+                if isinstance(choice, dict) and choice.get("value") in saved_folders:
+                    choice["enabled"] = True
 
-        if folders is None:
-            _print_status_message("Aborted. No changes saved.", success=False)
+            folders = inquirer.checkbox(
+                message="Folders to sync (empty = sync all):",
+                choices=folder_choices,
+            ).execute()
+
+            if folders is None:
+                _print_status_message("Aborted. No changes saved.", success=False)
             return 0
     else:
         print_warn("  WRN - Could not connect to tablet. Folder selection skipped.")
@@ -621,7 +695,7 @@ def _run_wizard(current, inquirer) -> int:
         console.print(Text("  Markdown:   ") + _path_link(output_dir))
         click.echo(f"  Images:     {'yes (_images/ folder)' if embed_images else 'no'}")
         click.echo(f"  AI:         {ai_provider} ({ai_model})")
-        has_token = bool(github_token or claude_api_key)
+        has_token = bool(github_token or claude_api_key or google_api_key)
         click.echo(f"  Token:      {'OK - saved in keyring' if has_token else '(not set)'}")
         # Show custom instructions status
         from src.config import load_custom_instructions

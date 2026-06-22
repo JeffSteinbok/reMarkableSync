@@ -143,3 +143,53 @@ class TestGitHubModelsProvider:
         result = p.transcribe_handwriting([img])
         assert result == "Test transcription"
         mock_client.chat.completions.create.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# GoogleProvider
+# ---------------------------------------------------------------------------
+
+
+class TestGoogleProvider:
+    def test_is_not_available_without_api_key(self):
+        with patch.dict("os.environ", {}, clear=True):
+            import os
+
+            os.environ.pop("GOOGLE_API_KEY", None)
+            from src.ai import GoogleProvider
+
+            p = GoogleProvider(api_key="")
+        assert not p.is_available()
+
+    def test_is_not_available_when_google_not_installed(self):
+        with patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}):
+            with patch.dict("sys.modules", {"google.generativeai": None, "google": None}):
+                from src.ai import GoogleProvider
+
+                p = GoogleProvider(api_key="test-key")
+                # _client will be None because import failed
+                assert p._client is None
+
+    def test_transcribe_returns_empty_when_unavailable(self):
+        from src.ai import GoogleProvider
+
+        p = GoogleProvider(api_key="")
+        assert p.transcribe_handwriting([Path("/fake/image.png")]) == ""
+
+    def test_cleanup_returns_raw_when_unavailable(self):
+        from src.ai import GoogleProvider
+
+        p = GoogleProvider(api_key="")
+        assert p.cleanup_text("some text") == "some text"
+
+    def test_get_provider_returns_google(self):
+        from src.ai import GoogleProvider
+
+        p = get_provider("google", api_key="dummy")
+        assert isinstance(p, GoogleProvider)
+
+    def test_get_provider_gemini_alias(self):
+        from src.ai import GoogleProvider
+
+        p = get_provider("gemini", api_key="dummy")
+        assert isinstance(p, GoogleProvider)

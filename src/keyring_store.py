@@ -13,11 +13,12 @@ try:
 except ImportError:
     KEYRING_AVAILABLE = False
 
-SERVICE = "RemarkableSync"
+SERVICE = "remarkablesync"
 
 # Keyring usernames for each secret
 KEY_GITHUB_TOKEN = "github_token"
 KEY_CLAUDE_API_KEY = "claude_api_key"
+KEY_GOOGLE_API_KEY = "google_api_key"
 
 
 def get_secret(key: str) -> str:
