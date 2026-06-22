@@ -364,6 +364,43 @@
             background: var(--night-light);
         }
 
+        .compatibility-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.25rem;
+        }
+
+        .compatibility-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+
+        .compatibility-card h3 {
+            font-size: 1rem;
+            margin-bottom: 0.75rem;
+            color: var(--text);
+        }
+
+        .compatibility-status {
+            display: inline-block;
+            margin-bottom: 0.75rem;
+            padding: 0.25rem 0.6rem;
+            border-radius: 999px;
+            background: var(--surface-light);
+            border: 1px solid var(--border);
+            color: var(--accent);
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .compatibility-card p {
+            font-size: 0.92rem;
+            color: var(--text-dim);
+            margin-bottom: 0;
+        }
+
         .install-options {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -576,6 +613,7 @@
     <div class="hero">
         <h1>Your handwritten notes,<br><span class="highlight">backed up locally & readable by AI</span></h1>
         <p>Backup your reMarkable tablet, convert notebooks to PDF, and transcribe handwriting to Markdown with AI — over USB or Wi-Fi.</p>
+        <p style="margin-top: 0.5rem; font-size: 0.9rem; color: var(--text-muted);">Works with reMarkable 2 and reMarkable Paper Pro · USB &amp; Wi-Fi · Open source</p>
         <div class="hero-buttons">
             <a href="https://github.com/JeffSteinbok/reMarkableSync" class="btn btn-primary">
                 <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
@@ -594,9 +632,31 @@
                 <div class="feature-item"><strong>USB & Wi-Fi Sync</strong> — connect via cable or wirelessly over your local network</div>
                 <div class="feature-item"><strong>Incremental Backup</strong> — only downloads files that have changed</div>
                 <div class="feature-item"><strong>PDF Conversion</strong> — full v5 and v6 .rm support with template backgrounds</div>
-                <div class="feature-item"><strong>AI Handwriting Recognition</strong> — transcribe handwriting with GitHub Copilot or Claude</div>
+                <div class="feature-item"><strong>AI Handwriting Recognition</strong> — transcribe handwriting with GitHub Copilot, Claude, or TrOCR (local, no API key)</div>
                 <div class="feature-item"><strong>Markdown Export</strong> — each notebook page becomes a .md file with frontmatter and images</div>
                 <div class="feature-item"><strong>Watch Mode</strong> — automatic periodic sync with a system-tray icon</div>
+            </div>
+        </div>
+    </section>
+
+    <section class="container">
+        <h2>Device Compatibility</h2>
+        <p class="section-sub">Current device support and the caveats to know before you set things up.</p>
+        <div class="compatibility-grid">
+            <div class="compatibility-card">
+                <h3>reMarkable 2</h3>
+                <span class="compatibility-status">Known to work</span>
+                <p>The primary device used for testing and the safest path for a straightforward setup.</p>
+            </div>
+            <div class="compatibility-card">
+                <h3>reMarkable Paper Pro</h3>
+                <span class="compatibility-status">Known to work with setup caveat</span>
+                <p>SSH must be enabled through developer mode, and enabling developer mode currently requires a factory reset.</p>
+            </div>
+            <div class="compatibility-card">
+                <h3>reMarkable 1</h3>
+                <span class="compatibility-status">Not currently verified</span>
+                <p>Compatibility is not guaranteed until it has been tested directly on reMarkable 1 hardware.</p>
             </div>
         </div>
     </section>
@@ -630,7 +690,7 @@
                 <div class="step-number">1</div>
                 <div class="step-content">
                     <h3>Configure</h3>
-                    <p>Run the setup wizard to connect to your tablet and choose an AI provider.</p>
+                    <p>Run the setup wizard to connect to your tablet and choose an AI provider (GitHub Copilot, Claude, or local TrOCR).</p>
                     <div class="install-option" style="margin-top: 0.75rem;">
                         <code>reMarkableSync config</code>
                         <button class="copy-btn" data-copy="reMarkableSync config">Copy</button>
