@@ -8,7 +8,6 @@
 [![Build Executables](https://github.com/JeffSteinbok/reMarkableSync/actions/workflows/build-executables.yml/badge.svg)](https://github.com/JeffSteinbok/reMarkableSync/actions/workflows/build-executables.yml)
 [![PyPI version](https://img.shields.io/pypi/v/remarkablesync.svg)](https://pypi.org/project/remarkablesync/)
 [![Homebrew](https://img.shields.io/badge/Homebrew-remarkablesync-FBB040?logo=homebrew)](https://github.com/JeffSteinbok/homebrew-remarkablesync)
-[![winget](https://img.shields.io/badge/winget-JeffSteinbok.reMarkableSync-blue?logo=windows)](https://github.com/microsoft/winget-pkgs/tree/master/manifests/j/JeffSteinbok/reMarkableSync)
 [![Website](https://img.shields.io/badge/Website-jeffsteinbok.github.io-blue?logo=github-pages)](https://jeffsteinbok.github.io/reMarkableSync/)
 
 A comprehensive Python toolkit for backing up reMarkable tablet notebooks, converting them to PDF, and transcribing handwriting to Markdown with AI — over USB or Wi-Fi.
@@ -19,7 +18,7 @@ A comprehensive Python toolkit for backing up reMarkable tablet notebooks, conve
 > - **reMarkable Paper Pro** — expected to work, but SSH must be enabled through developer mode, which currently requires a factory reset
 > - **reMarkable 1** — not currently verified; compatibility is not guaranteed
 >
-> AI handwriting-to-text features work with **GitHub Copilot**, **Claude** (Anthropic), or **TrOCR** (local, offline — no account or API key required).
+> AI handwriting-to-text features work with **GitHub Copilot**, **Claude** (Anthropic), or **Google Gemini** (free tier available).
 
 ## Device Compatibility
 
@@ -34,7 +33,7 @@ A comprehensive Python toolkit for backing up reMarkable tablet notebooks, conve
 - **USB & Wi-Fi sync** — connect via cable or wirelessly over your local network
 - **Incremental backup** — only downloads files that have changed (tracked by size, mtime, and MD5)
 - **PDF conversion** — v5 and v6 .rm formats with template backgrounds, folder hierarchy preserved
-- **AI handwriting recognition** — send page images to GitHub Models (GPT-4o), Claude, or run locally with TrOCR (no API key needed)
+- **AI handwriting recognition** — send page images to GitHub Models (GPT-4o), Claude, or Google Gemini
 - **Markdown export** — each notebook becomes a `.md` file with YAML frontmatter and embedded page images
 - **Watch mode** — automatic periodic sync with system-tray status icon and run-at-startup option
 - **Secure credential storage** — SSH password and AI tokens stored in your system keyring
@@ -68,7 +67,7 @@ The wizard walks you through:
 | **Backup directory** | `<AppData>/remarkablesync/backup` (internal sync data) |
 | **PDF output** | `~/Documents/reMarkableSync/PDF` |
 | **Markdown output** | `~/Documents/reMarkableSync/Markdown` |
-| **AI provider** | GitHub Models (free with Copilot), Claude (requires API key), or TrOCR (local, no account needed) |
+| **AI provider** | GitHub Models (free with Copilot), Claude, or Google Gemini (free tier available) |
 | **AI token** | Stored securely in system keyring |
 | **Folders** | Choose which tablet folders to sync (or all) |
 
