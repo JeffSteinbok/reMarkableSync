@@ -252,7 +252,7 @@ class TestPrintConfigSummary:
         captured = capsys.readouterr()
         assert "_images" in captured.out
 
-    def test_images_no_shown_when_embed_images_false(self, capsys):
+    def test_images_not_shown_when_embed_images_false(self, capsys):
         """Shows 'no' for images line when embed_images is False."""
         from src.commands.config_command import print_config_summary
 
