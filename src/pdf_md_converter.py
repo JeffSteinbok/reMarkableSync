@@ -56,6 +56,7 @@ class MarkdownExporter:
         ocr_engine: Optional[OCREngine] = None,
         tags: Optional[List[str]] = None,
         embed_images: bool = True,
+        attachment_folder: str = "_images",
         registry: Optional[NameRegistry] = None,
     ):
         self.output_dir = output_dir
@@ -63,6 +64,7 @@ class MarkdownExporter:
         self.ocr_engine = ocr_engine
         self.tags = tags or ["remarkable"]
         self.embed_images = embed_images
+        self.attachment_folder = attachment_folder or "_images"
         self.registry = registry
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -96,7 +98,7 @@ class MarkdownExporter:
         pdf_path: Path,
         images_dir: Path,
     ) -> List[Path]:
-        """Rasterise PDF pages and copy them into *images_dir/_images/*.
+        """Rasterise PDF pages and copy them into *images_dir/<attachment_folder>/*.
 
         Returns a list of paths suitable for embedded image links.
         """
@@ -105,7 +107,7 @@ class MarkdownExporter:
         if not pdf_path.exists():
             return []
 
-        target_dir = images_dir / "_images"
+        target_dir = images_dir / self.attachment_folder
         target_dir.mkdir(parents=True, exist_ok=True)
 
         try:
@@ -203,7 +205,7 @@ class MarkdownExporter:
                 lines.append("\n\n")
 
         if page_image and page_image.exists():
-            link = f"_images/{page_image.name}"
+            link = f"{self.attachment_folder}/{page_image.name}"
             lines.append(f"![page {page_num}]({link})\n")
 
         return "".join(lines)
@@ -356,7 +358,7 @@ class MarkdownExporter:
                 page_images: List[Path] = []  # noqa: F841
 
                 if self.embed_images:
-                    images_dir = notebook_dir / "_images"
+                    images_dir = notebook_dir / self.attachment_folder
                     images_dir.mkdir(parents=True, exist_ok=True)
                     try:
                         import fitz  # PyMuPDF

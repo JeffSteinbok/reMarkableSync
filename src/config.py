@@ -67,6 +67,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "ocr_output_dir": "",
     "output_dir": "",
     "embed_images": True,
+    "attachment_folder": "_images",
     "pdf_dir": "",
     "ai_provider": "github",
     "ai_model": "",

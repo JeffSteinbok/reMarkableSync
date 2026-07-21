@@ -13,6 +13,48 @@ import pytest
 from tests.mock_connection import MockConnection
 
 
+class TestAttachmentFolderConfig:
+    """Tests that attachment_folder is handled correctly in config load/save."""
+
+    def test_default_config_has_attachment_folder(self):
+        """DEFAULT_CONFIG includes attachment_folder defaulting to '_images'."""
+        from src.config import DEFAULT_CONFIG
+
+        assert "attachment_folder" in DEFAULT_CONFIG
+        assert DEFAULT_CONFIG["attachment_folder"] == "_images"
+
+    def test_load_defaults_attachment_folder_when_absent(self, tmp_path):
+        """Older config files missing attachment_folder get the default merged in."""
+        from src.config import load_config
+
+        fake_path = tmp_path / "config.json"
+        fake_path.parent.mkdir(parents=True, exist_ok=True)
+        # Write a config that has no attachment_folder key
+        fake_path.write_text(json.dumps({"connection_mode": "usb"}))
+
+        with patch("src.config.get_config_path", return_value=fake_path):
+            loaded = load_config()
+
+        assert loaded.get("attachment_folder") == "_images"
+
+    def test_save_and_load_preserves_custom_attachment_folder(self, tmp_path):
+        """Custom attachment_folder survives a save/load round-trip."""
+        from src.config import load_config, save_config
+
+        fake_path = tmp_path / "remarkablesync" / "config.json"
+        test_config = {
+            "connection_mode": "usb",
+            "attachment_folder": "_attachments",
+            "embed_images": True,
+        }
+
+        with patch("src.config.get_config_path", return_value=fake_path):
+            save_config(test_config)
+            loaded = load_config()
+
+        assert loaded["attachment_folder"] == "_attachments"
+
+
 class TestMockConnection:
     """Tests for the mock tablet connection."""
 

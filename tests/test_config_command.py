@@ -220,6 +220,55 @@ class TestPrintConfigSummary:
 
         print_config_summary(cfg)
 
+    def test_prints_custom_attachment_folder(self, capsys):
+        """Shows custom attachment folder when embed_images is enabled."""
+        from src.commands.config_command import print_config_summary
+
+        cfg = {
+            "connection_mode": "usb",
+            "ocr_enabled": True,
+            "output_dir": "/tmp/md",
+            "embed_images": True,
+            "attachment_folder": "_attachments",
+        }
+
+        print_config_summary(cfg)
+        captured = capsys.readouterr()
+        assert "_attachments" in captured.out
+
+    def test_prints_default_images_folder_when_attachment_folder_absent(self, capsys):
+        """Falls back to '_images' when attachment_folder is not in config."""
+        from src.commands.config_command import print_config_summary
+
+        cfg = {
+            "connection_mode": "usb",
+            "ocr_enabled": True,
+            "output_dir": "/tmp/md",
+            "embed_images": True,
+            # no attachment_folder key
+        }
+
+        print_config_summary(cfg)
+        captured = capsys.readouterr()
+        assert "_images" in captured.out
+
+    def test_images_no_shown_when_embed_images_false(self, capsys):
+        """Shows 'no' for images line when embed_images is False."""
+        from src.commands.config_command import print_config_summary
+
+        cfg = {
+            "connection_mode": "usb",
+            "ocr_enabled": True,
+            "output_dir": "/tmp/md",
+            "embed_images": False,
+            "attachment_folder": "_attachments",
+        }
+
+        print_config_summary(cfg)
+        captured = capsys.readouterr()
+        assert "no" in captured.out
+        assert "_attachments" not in captured.out
+
 
 # ---------------------------------------------------------------------------
 # Existing tests
@@ -297,6 +346,7 @@ def test_run_config_command_without_ocr_preserves_embed_images():
                     "ocr_enabled": False,
                     "output_dir": "",
                     "embed_images": False,
+                    "attachment_folder": "_images",
                     "ai_provider": "github",
                     "ai_model": "",
                     "pre_sync_command": "",
@@ -313,6 +363,153 @@ def test_run_config_command_without_ocr_preserves_embed_images():
     assert mock_save.call_count == 1
     saved = mock_save.call_args.args[0]
     assert not saved["embed_images"]
+
+
+def test_wizard_saves_custom_attachment_folder():
+    """Config wizard saves a custom attachment_folder when OCR is enabled."""
+    from src.commands.config_command import run_config_command
+
+    # Use empty password so the wizard never reaches the credential_store import
+    # (which drags in paramiko/cryptography and can cause PyO3 reinit errors
+    # when sys.modules is restored between tests).
+    # Use Claude provider to avoid the GitHub device-flow / keyring complexity.
+    # Prompt order when ocr=True and embed_images=True, no saved password,
+    # no existing Claude key:
+    #   1 connection mode, 2 ssh password (secret, empty), 3 backup dir,
+    #   4 sync action, 5 pdf dir, 6 md dir, 7 embed images, 8 attachment folder,
+    #   9 ai provider (claude), 10 claude api key, 11 claude model,
+    #   12 custom instructions, 13 pre_sync_command, 14 post_sync_command,
+    #   15 connect to tablet
+    fake_inquirer = FakeInquirer(
+        [
+            "usb",                  # 1 connection mode
+            "",                     # 2 SSH password (empty → no keyring save)
+            "/tmp/backup",          # 3 backup dir
+            "ocr",                  # 4 sync action
+            "/tmp/pdf",             # 5 pdf dir
+            "/tmp/md",              # 6 markdown output dir
+            True,                   # 7 embed images?
+            "_attachments",         # 8 attachment folder name
+            "claude",               # 9 ai provider
+            "sk-ant-fake",          # 10 claude api key
+            "claude-sonnet-4-6",    # 11 claude model
+            "",                     # 12 custom instructions
+            "",                     # 13 pre_sync_command
+            "",                     # 14 post_sync_command
+            False,                  # 15 connect to tablet?
+        ]
+    )
+    fake_inquirer_module = types.ModuleType("InquirerPy")
+    fake_inquirer_module.inquirer = fake_inquirer
+    fake_separator_module = types.ModuleType("InquirerPy.separator")
+    fake_separator_module.Separator = object
+
+    with patch.dict(
+        sys.modules,
+        {"InquirerPy": fake_inquirer_module, "InquirerPy.separator": fake_separator_module},
+    ):
+        with (
+            patch(
+                "src.commands.config_command.load_config",
+                return_value={
+                    "connection_mode": "usb",
+                    "wifi_host": "",
+                    "password": "",        # no saved password → no credential_store import
+                    "backup_dir": "/tmp/old-backup",
+                    "pdf_dir": "/tmp/old-pdf",
+                    "folders": [],
+                    "sync_actions": ["backup", "pdf", "ocr"],
+                    "ocr_enabled": True,
+                    "output_dir": "/tmp/md",
+                    "embed_images": True,
+                    "attachment_folder": "_images",
+                    "ai_provider": "claude",
+                    "ai_model": "claude-sonnet-4-6",
+                    "pre_sync_command": "",
+                    "post_sync_command": "",
+                    "ocr_custom_instructions": "",
+                },
+            ),
+            patch("src.keyring_store.get_secret", return_value=""),
+            patch("src.keyring_store.set_secret", return_value=True),
+            patch("src.commands.config_command._get_folder_choices_live", return_value=[]),
+            patch(
+                "src.commands.config_command.save_config", return_value=Path("/tmp/config.json")
+            ) as mock_save,
+        ):
+            assert run_config_command() == 0
+
+    assert mock_save.call_count == 1
+    saved = mock_save.call_args.args[0]
+    assert saved["attachment_folder"] == "_attachments"
+
+
+def test_wizard_saves_default_attachment_folder_when_blank_entered():
+    """Config wizard falls back to '_images' when user enters blank attachment folder."""
+    from src.commands.config_command import run_config_command
+
+    fake_inquirer = FakeInquirer(
+        [
+            "usb",                  # 1 connection mode
+            "",                     # 2 SSH password (empty → no keyring save)
+            "/tmp/backup",          # 3 backup dir
+            "ocr",                  # 4 sync action
+            "/tmp/pdf",             # 5 pdf dir
+            "/tmp/md",              # 6 markdown output dir
+            True,                   # 7 embed images?
+            "",                     # 8 attachment folder (blank → _images)
+            "claude",               # 9 ai provider
+            "sk-ant-fake",          # 10 claude api key
+            "claude-sonnet-4-6",    # 11 claude model
+            "",                     # 12 custom instructions
+            "",                     # 13 pre_sync_command
+            "",                     # 14 post_sync_command
+            False,                  # 15 connect to tablet?
+        ]
+    )
+    fake_inquirer_module = types.ModuleType("InquirerPy")
+    fake_inquirer_module.inquirer = fake_inquirer
+    fake_separator_module = types.ModuleType("InquirerPy.separator")
+    fake_separator_module.Separator = object
+
+    with patch.dict(
+        sys.modules,
+        {"InquirerPy": fake_inquirer_module, "InquirerPy.separator": fake_separator_module},
+    ):
+        with (
+            patch(
+                "src.commands.config_command.load_config",
+                return_value={
+                    "connection_mode": "usb",
+                    "wifi_host": "",
+                    "password": "",        # no saved password → no credential_store import
+                    "backup_dir": "/tmp/old-backup",
+                    "pdf_dir": "/tmp/old-pdf",
+                    "folders": [],
+                    "sync_actions": ["backup", "pdf", "ocr"],
+                    "ocr_enabled": True,
+                    "output_dir": "/tmp/md",
+                    "embed_images": True,
+                    "attachment_folder": "_images",
+                    "ai_provider": "claude",
+                    "ai_model": "claude-sonnet-4-6",
+                    "pre_sync_command": "",
+                    "post_sync_command": "",
+                    "ocr_custom_instructions": "",
+                },
+            ),
+            patch("src.keyring_store.get_secret", return_value=""),
+            patch("src.keyring_store.set_secret", return_value=True),
+            patch("src.commands.config_command._get_folder_choices_live", return_value=[]),
+            patch(
+                "src.commands.config_command.save_config", return_value=Path("/tmp/config.json")
+            ) as mock_save,
+        ):
+            assert run_config_command() == 0
+
+    assert mock_save.call_count == 1
+    saved = mock_save.call_args.args[0]
+    assert saved["attachment_folder"] == "_images"
 
 
 def test_main_without_config_requires_running_config_first(capsys, tmp_path):

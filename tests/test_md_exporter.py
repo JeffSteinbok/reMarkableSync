@@ -1,7 +1,7 @@
 """Tests for the Markdown exporter."""
 
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from src.pdf_md_converter import MarkdownExporter, _file_hash
 from src.utils import sanitize_name
@@ -312,3 +312,215 @@ class TestMarkdownExporter:
         exp = self._make_exporter(output_dir, backup)
         exported, skipped, _dirs = exp.export_all(notebooks, pdf_dir)
         assert exported == 1  # only the document, not the folder
+
+
+class TestAttachmentFolder:
+    """Tests for the configurable attachment_folder feature."""
+
+    # ------------------------------------------------------------------
+    # Constructor / default value
+    # ------------------------------------------------------------------
+
+    def test_default_attachment_folder_is_images(self, tmp_path):
+        """attachment_folder defaults to '_images' when not specified."""
+        exp = MarkdownExporter(
+            output_dir=tmp_path / "output",
+            backup_dir=tmp_path / "backup",
+            embed_images=False,
+        )
+        assert exp.attachment_folder == "_images"
+
+    def test_custom_attachment_folder_stored(self, tmp_path):
+        """Constructor stores a custom attachment_folder value."""
+        exp = MarkdownExporter(
+            output_dir=tmp_path / "output",
+            backup_dir=tmp_path / "backup",
+            embed_images=False,
+            attachment_folder="_attachments",
+        )
+        assert exp.attachment_folder == "_attachments"
+
+    def test_empty_attachment_folder_falls_back_to_default(self, tmp_path):
+        """Passing empty string for attachment_folder should default to _images."""
+        exp = MarkdownExporter(
+            output_dir=tmp_path / "output",
+            backup_dir=tmp_path / "backup",
+            embed_images=False,
+            attachment_folder="",
+        )
+        assert exp.attachment_folder == "_images"
+
+    def test_none_attachment_folder_falls_back_to_default(self, tmp_path):
+        """Passing None for attachment_folder should default to _images."""
+        exp = MarkdownExporter(
+            output_dir=tmp_path / "output",
+            backup_dir=tmp_path / "backup",
+            embed_images=False,
+            attachment_folder=None,
+        )
+        assert exp.attachment_folder == "_images"
+
+    # ------------------------------------------------------------------
+    # _build_page_markdown image link
+    # ------------------------------------------------------------------
+
+    def test_custom_folder_used_in_image_link(self, tmp_path):
+        """_build_page_markdown embeds image using the custom attachment_folder."""
+        exp = MarkdownExporter(
+            output_dir=tmp_path / "output",
+            backup_dir=tmp_path / "backup",
+            tags=["test"],
+            embed_images=True,
+            attachment_folder="_attachments",
+        )
+        img_dir = tmp_path / "_attachments"
+        img_dir.mkdir(parents=True, exist_ok=True)
+        img = img_dir / "page_001.png"
+        img.write_bytes(b"fake png")
+
+        content = exp._build_page_markdown(
+            title="Test",
+            notebook_name="Notebook",
+            notebook_uuid="uuid-x",
+            folder_path="",
+            page_num=1,
+            page_text="",
+            page_image=img,
+        )
+        assert "_attachments/page_001.png" in content
+        assert "_images" not in content
+
+    def test_default_folder_used_in_image_link(self, tmp_path):
+        """Without a custom folder, image link should reference _images/."""
+        exp = MarkdownExporter(
+            output_dir=tmp_path / "output",
+            backup_dir=tmp_path / "backup",
+            tags=["test"],
+            embed_images=True,
+        )
+        img_dir = tmp_path / "_images"
+        img_dir.mkdir(parents=True, exist_ok=True)
+        img = img_dir / "page_001.png"
+        img.write_bytes(b"fake png")
+
+        content = exp._build_page_markdown(
+            title="Test",
+            notebook_name="Notebook",
+            notebook_uuid="uuid-x",
+            folder_path="",
+            page_num=1,
+            page_text="",
+            page_image=img,
+        )
+        assert "_images/page_001.png" in content
+
+    def test_image_link_absent_when_file_missing(self, tmp_path):
+        """No image link is embedded when the image path does not exist."""
+        exp = MarkdownExporter(
+            output_dir=tmp_path / "output",
+            backup_dir=tmp_path / "backup",
+            embed_images=True,
+            attachment_folder="_attachments",
+        )
+        nonexistent = tmp_path / "_attachments" / "page_001.png"
+
+        content = exp._build_page_markdown(
+            title="Test",
+            notebook_name="Notebook",
+            notebook_uuid="uuid-x",
+            folder_path="",
+            page_num=1,
+            page_text="some text",
+            page_image=nonexistent,
+        )
+        assert "![" not in content
+
+    # ------------------------------------------------------------------
+    # export_notebook creates correct subfolder on disk
+    # ------------------------------------------------------------------
+
+    def test_custom_folder_created_during_export(self, tmp_path):
+        """export_notebook creates the custom attachment subfolder when embed_images=True."""
+        output_dir = tmp_path / "output"
+        backup = tmp_path / "backup"
+        backup.mkdir()
+
+        notebook = _make_notebook("My Note", "uuid-attach")
+        pdf = backup / "My Note.pdf"
+        _write_dummy_pdf(pdf)
+
+        # Patch fitz so the test doesn't need PyMuPDF installed
+        fake_page = MagicMock()
+        fake_pix = MagicMock()
+        fake_pix.save = MagicMock()
+        fake_page.get_pixmap.return_value = fake_pix
+
+        fake_doc = MagicMock()
+        fake_doc.__iter__ = MagicMock(return_value=iter([fake_page]))
+        fake_doc.close = MagicMock()
+
+        with patch("fitz.open", return_value=fake_doc):
+            exp = MarkdownExporter(
+                output_dir=output_dir,
+                backup_dir=backup,
+                embed_images=True,
+                attachment_folder="assets",
+            )
+            result = exp.export_notebook(notebook, pdf)
+
+        assert result is not None
+        expected_folder = Path(result) / "assets"
+        assert expected_folder.exists(), f"Expected {expected_folder} to be created"
+
+    def test_default_images_folder_created_during_export(self, tmp_path):
+        """export_notebook creates _images/ by default when embed_images=True."""
+        output_dir = tmp_path / "output"
+        backup = tmp_path / "backup"
+        backup.mkdir()
+
+        notebook = _make_notebook("My Note", "uuid-default-img")
+        pdf = backup / "My Note.pdf"
+        _write_dummy_pdf(pdf)
+
+        fake_page = MagicMock()
+        fake_pix = MagicMock()
+        fake_pix.save = MagicMock()
+        fake_page.get_pixmap.return_value = fake_pix
+
+        fake_doc = MagicMock()
+        fake_doc.__iter__ = MagicMock(return_value=iter([fake_page]))
+        fake_doc.close = MagicMock()
+
+        with patch("fitz.open", return_value=fake_doc):
+            exp = MarkdownExporter(
+                output_dir=output_dir,
+                backup_dir=backup,
+                embed_images=True,
+            )
+            result = exp.export_notebook(notebook, pdf)
+
+        assert result is not None
+        expected_folder = Path(result) / "_images"
+        assert expected_folder.exists(), f"Expected {expected_folder} to be created"
+
+    def test_no_attachment_folder_created_when_embed_images_false(self, tmp_path):
+        """No attachment subfolder is created when embed_images=False."""
+        output_dir = tmp_path / "output"
+        backup = tmp_path / "backup"
+        backup.mkdir()
+
+        notebook = _make_notebook("My Note", "uuid-no-img")
+        pdf = backup / "My Note.pdf"
+        _write_dummy_pdf(pdf)
+
+        exp = MarkdownExporter(
+            output_dir=output_dir,
+            backup_dir=backup,
+            embed_images=False,
+            attachment_folder="assets",
+        )
+        result = exp.export_notebook(notebook, pdf)
+
+        assert result is not None
+        assert not (Path(result) / "assets").exists()
+        assert not (Path(result) / "_images").exists()

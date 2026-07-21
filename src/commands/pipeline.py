@@ -208,6 +208,7 @@ def run_pipeline(
         print_warn("  WRN - --use-ai-ocr set but no --ai-provider given. OCR skipped.")
 
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else ["reMarkable"]
+    attachment_folder = config.get("attachment_folder", "_images") or "_images"
 
     exporter = MarkdownExporter(
         output_dir=output_dir,
@@ -215,6 +216,7 @@ def run_pipeline(
         ocr_engine=ocr_engine,
         tags=tag_list,
         embed_images=embed_images,
+        attachment_folder=attachment_folder,
     )
 
     # Discover notebooks and their folder paths

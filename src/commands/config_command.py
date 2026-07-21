@@ -66,7 +66,11 @@ def print_config_summary(cfg: dict, config_path=None) -> None:
     if cfg.get("ocr_enabled"):
         if cfg.get("output_dir"):
             _row_path("Markdown:", cfg.get("output_dir"))
-        _row("Images:", "yes (_images/ folder)" if cfg.get("embed_images") else "no")
+        if cfg.get("embed_images"):
+            attach = cfg.get("attachment_folder", "_images") or "_images"
+            _row("Images:", f"yes ({attach}/ folder)")
+        else:
+            _row("Images:", "no")
         _row("AI:", f"{cfg.get('ai_provider', 'github')} ({cfg.get('ai_model', '')})")
         # Show custom instructions status
         custom_path = cfg.get("ocr_custom_instructions", "")
@@ -312,6 +316,7 @@ def _run_wizard(current, inquirer) -> int:
     ocr_enabled = "ocr" in sync_actions
     output_dir = current.get("output_dir", "")
     embed_images = current.get("embed_images", True)
+    attachment_folder = current.get("attachment_folder", "_images") or "_images"
 
     if ocr_enabled:
         default_output_dir = output_dir or str(docs / "RemarkableSync" / "Markdown")
@@ -336,6 +341,27 @@ def _run_wizard(current, inquirer) -> int:
         if embed_images is None:
             _print_status_message("Aborted. No changes saved.", success=False)
             return 0
+
+        # 7c. Attachment subfolder name (for Obsidian compatibility)
+        attachment_folder = current.get("attachment_folder", "_images") or "_images"
+        if embed_images:
+            click.echo()
+            click.secho(
+                "  Set the attachment subfolder to match your Obsidian "
+                '"File and links" attachment folder setting.',
+                fg="yellow",
+            )
+            attachment_folder = (
+                inquirer.text(
+                    message="Attachment subfolder name (blank=_images):",
+                    default=attachment_folder,
+                ).execute()
+                or "_images"
+            )
+
+            if attachment_folder is None:
+                _print_status_message("Aborted. No changes saved.", success=False)
+                return 0
 
     # 7. AI provider selection (only if OCR is enabled)
     previous_provider = current.get("ai_provider", "github")
@@ -658,6 +684,7 @@ def _run_wizard(current, inquirer) -> int:
             "ocr_enabled": ocr_enabled,
             "output_dir": output_dir,
             "embed_images": embed_images,
+            "attachment_folder": attachment_folder,
             "ai_provider": ai_provider,
             "ai_model": ai_model,
             "ocr_custom_instructions": ocr_custom_instructions,
@@ -693,7 +720,10 @@ def _run_wizard(current, inquirer) -> int:
     click.echo(f"  Actions:    {', '.join(sync_actions)}")
     if ocr_enabled:
         console.print(Text("  Markdown:   ") + _path_link(output_dir))
-        click.echo(f"  Images:     {'yes (_images/ folder)' if embed_images else 'no'}")
+        if embed_images:
+            click.echo(f"  Images:     yes ({attachment_folder}/ folder)")
+        else:
+            click.echo("  Images:     no")
         click.echo(f"  AI:         {ai_provider} ({ai_model})")
         has_token = bool(github_token or claude_api_key or google_api_key)
         click.echo(f"  Token:      {'OK - saved in keyring' if has_token else '(not set)'}")
