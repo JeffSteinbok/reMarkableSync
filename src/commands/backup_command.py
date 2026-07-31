@@ -45,7 +45,7 @@ def run_backup_command(
     print(f"Backup directory: {backup_dir.absolute()}")
 
     if use_cloud:
-        print("Connection mode: reMarkable Cloud (unofficial API, read-only)")
+        print("Connection mode: reMarkable Cloud")
     elif use_wifi:
         print(f"Connection mode: Wi-Fi ({wifi_host or 'auto-discover'})")
     else:

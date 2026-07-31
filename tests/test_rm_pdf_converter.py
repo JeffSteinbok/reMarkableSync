@@ -166,6 +166,32 @@ class TestRunConversionUpdatedUuids:
         assert results_captured == ["nb-a"]
 
 
+def test_conversion_logs_overall_page_progress(tmp_path, caplog):
+    notebooks = [
+        _make_notebook(uuid="nb-a", name="A", v6_files=["a1.rm", "a2.rm"]),
+        _make_notebook(uuid="nb-b", name="B", v6_files=["b1.rm"]),
+    ]
+    bd = _build_backup(tmp_path)
+
+    def _fake_convert(notebook, *args, **kwargs):
+        on_page_done = kwargs["on_page_done"]
+        for _ in notebook["v6_files"]:
+            on_page_done()
+        return {"output_files": [Path("/fake.pdf")], "page_pdfs": [], "pdf_changed": True}
+
+    with (
+        patch(_PATCH_FIND, return_value=notebooks),
+        patch(_PATCH_ORG, return_value={"documents_to_convert": notebooks}),
+        patch(_PATCH_CONVERT, side_effect=_fake_convert),
+        _patch_progress(),
+        caplog.at_level("INFO"),
+    ):
+        run_conversion(bd, tmp_path / "output")
+
+    assert "PDF: A (page 2/2, overall 2/3)" in caplog.text
+    assert "PDF: B (page 1/1, overall 3/3)" in caplog.text
+
+
 # ---------------------------------------------------------------------------
 # notebook_filter
 # ---------------------------------------------------------------------------

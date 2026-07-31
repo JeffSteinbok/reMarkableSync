@@ -394,6 +394,54 @@ def test_run_config_command_without_ocr_preserves_embed_images():
     assert not saved["embed_images"]
 
 
+def test_run_config_command_saves_cloud_missing_policy(capsys):
+    from src.commands.config_command import _run_wizard
+
+    fake_inquirer = FakeInquirer(
+        [
+            "cloud",
+            "archive",
+            "/tmp/cloud-backup",
+            "backup",
+            "",
+            "",
+            False,
+        ]
+    )
+    current = {
+        "connection_mode": "usb",
+        "cloud_missing_policy": "keep",
+        "backup_dir": "",
+        "folders": [],
+        "sync_actions": ["backup"],
+        "ocr_enabled": False,
+        "output_dir": "",
+        "embed_images": True,
+        "ai_provider": "github",
+        "ai_model": "",
+        "pre_sync_command": "",
+        "post_sync_command": "",
+    }
+
+    with (
+        patch("src.commands.config_command._configure_cloud_auth", return_value=True),
+        patch(
+            "src.commands.config_command.save_config",
+            return_value=Path("/tmp/config.json"),
+        ) as mock_save,
+    ):
+        assert _run_wizard(current, fake_inquirer) == 0
+
+    saved = mock_save.call_args.args[0]
+    assert saved["connection_mode"] == "cloud"
+    assert saved["cloud_missing_policy"] == "archive"
+    output = capsys.readouterr().out
+    assert "No Connect" in output
+    assert "connections.html" in output
+    assert "reMarkableSync watch" in output
+    assert "reMarkableSync --help" in output
+
+
 def test_main_without_config_requires_running_config_first(capsys, tmp_path):
     import reMarkableSync
 

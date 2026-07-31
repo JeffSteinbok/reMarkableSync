@@ -56,6 +56,14 @@ def print_config_summary(cfg: dict, config_path=None) -> None:
         _row("Host:", cfg.get("wifi_host", "(not set)"))
     if cfg.get("connection_mode") == "cloud":
         _row("Auth:", "device token in system keyring")
+        _row(
+            "Missing:",
+            (
+                "move to Cloud Archive"
+                if cfg.get("cloud_missing_policy") == "archive"
+                else "keep local backup"
+            ),
+        )
     else:
         _row("Password:", "••••••••" if cfg.get("password_in_keyring") else "(not set)")
     if cfg.get("backup_dir"):
@@ -116,8 +124,8 @@ def run_config_command(log_level: str = "NONE") -> int:
     console.print()
     console.print(Rule("[bold]Configuration Wizard[/bold]", style="dim"))
     click.echo()
-    click.secho("  This wizard will guide you through the setup process.", fg="yellow")
-    click.secho("  Press Ctrl+C at any time to abort without saving changes.", fg="yellow")
+    click.secho("  Follow the prompts to configure reMarkableSync.", fg="yellow")
+    click.secho("  Press Ctrl+C to abort without saving.", fg="yellow")
     click.echo()
 
     try:
@@ -130,15 +138,34 @@ def run_config_command(log_level: str = "NONE") -> int:
 def _run_wizard(current, inquirer) -> int:
     """Internal wizard logic."""
     # 1. Connection Mode
+    click.secho("  Choose how to access your notebooks:", bold=True)
+    click.echo()
+    click.echo("  USB")
+    click.echo("    + Most reliable; includes device templates")
+    click.echo("    - Cable and developer mode required")
+    click.echo("  Wi-Fi")
+    click.echo("    + No cable; includes device templates")
+    click.echo("    - Same network and Wi-Fi SSH required")
+    click.echo("  Cloud API")
+    click.echo("    + Tablet does not need to be nearby")
+    click.echo("    - Slower; no device templates")
+    click.echo("    - No Connect: inactive files may vanish after 50 days")
+    click.echo()
+    from rich.console import Console
+    from rich.text import Text
+
+    details_url = "https://jeffsteinbok.github.io/reMarkableSync/connections.html"
+    details = Text("  More details:\n    ")
+    details.append(details_url, style=f"link {details_url} cyan underline")
+    Console(highlight=False).print(details)
+    click.echo()
+
     connection_mode = inquirer.select(
         message="Connection mode:",
         choices=[
-            {"name": "USB  (direct cable connection)", "value": "usb"},
-            {"name": "WiFi (wireless network connection)", "value": "wifi"},
-            {
-                "name": "Cloud (unofficial reMarkable API, read-only)",
-                "value": "cloud",
-            },
+            {"name": "USB", "value": "usb"},
+            {"name": "Wi-Fi", "value": "wifi"},
+            {"name": "Cloud API", "value": "cloud"},
         ],
         default=current.get("connection_mode", "usb"),
     ).execute()
@@ -219,10 +246,35 @@ def _run_wizard(current, inquirer) -> int:
 
     # 3. Password
     current_password = current.get("password", "")
+    cloud_missing_policy = current.get("cloud_missing_policy", "keep")
     if connection_mode == "cloud":
         password = ""
         if not _configure_cloud_auth(inquirer):
             return 1
+        click.echo()
+        click.secho("  How should missing cloud files be handled?", bold=True)
+        click.echo("  No Connect: inactive files may vanish after 50 days.")
+        click.echo("  They may still exist on your tablet.")
+        click.echo('  "Treat as deleted" moves local copies to Cloud Archive.')
+        click.echo("  Nothing is permanently deleted.")
+        click.echo()
+        cloud_missing_policy = inquirer.select(
+            message="When a synced cloud file is missing:",
+            choices=[
+                {
+                    "name": "Keep local backup (recommended)",
+                    "value": "keep",
+                },
+                {
+                    "name": "Move local backup to Cloud Archive",
+                    "value": "archive",
+                },
+            ],
+            default=cloud_missing_policy,
+        ).execute()
+        if cloud_missing_policy is None:
+            _print_status_message("Aborted. No changes saved.", success=False)
+            return 0
     elif current_password:
         click.echo("  SSH password: (saved)")
         change_pw = inquirer.confirm(
@@ -661,6 +713,7 @@ def _run_wizard(current, inquirer) -> int:
     config.update(
         {
             "connection_mode": connection_mode,
+            "cloud_missing_policy": cloud_missing_policy,
             "wifi_host": wifi_host,
             "password_in_keyring": password_saved_to_keyring,
             "backup_dir": backup_dir,
@@ -699,6 +752,14 @@ def _run_wizard(current, inquirer) -> int:
         click.echo(f"  Host:       {wifi_host}")
     if connection_mode == "cloud":
         click.echo("  Auth:       cloud device token in system keyring")
+        click.echo(
+            "  Missing:    "
+            + (
+                "move to Cloud Archive"
+                if cloud_missing_policy == "archive"
+                else "keep local backup"
+            )
+        )
     else:
         click.echo(f"  Password:   {'••••••••' if password_saved_to_keyring else '(not set)'}")
     console.print(Text("  Backup:     ") + _path_link(backup_dir))
@@ -726,6 +787,10 @@ def _run_wizard(current, inquirer) -> int:
         click.echo(f"  Pre:       {pre_sync_command}")
     if post_sync_command:
         click.echo(f"  Post:      {post_sync_command}")
+    click.echo()
+    click.secho("  Next step:", bold=True)
+    click.echo("    reMarkableSync watch")
+    click.echo("    More options: reMarkableSync --help")
     click.echo()
 
     return 0
@@ -899,37 +964,11 @@ def _get_cloud_folder_choices() -> List[Dict[str, Any]]:
 
     conn = ReMarkableCloudConnection()
     try:
-        if not conn.connect():
-            print_warn("  WRN - Could not connect to reMarkable Cloud.")
-            return []
-
-        xochitl = "/home/root/.local/share/remarkable/xochitl"
-        stdout, _, exit_code = conn.execute_command(
-            f"for f in {xochitl}/*.metadata; do "
-            f'[ -f "$f" ] && echo "FILE:$f" && cat "$f"; '
-            f"done"
-        )
-        if exit_code != 0:
-            click.echo("  WRN - Failed to read metadata from reMarkable Cloud.")
-            return []
-
-        folders: List[str] = []
-        current_json = []
-        for line in stdout.split("\n"):
-            if line.startswith("FILE:"):
-                if current_json:
-                    _parse_folder_metadata("\n".join(current_json), folders)
-                current_json = []
-            else:
-                current_json.append(line)
-        if current_json:
-            _parse_folder_metadata("\n".join(current_json), folders)
-
+        folders = conn.list_top_level_folders()
         if not folders:
             click.echo("  No top-level folders found in reMarkable Cloud.")
             return []
 
-        folders.sort()
         click.echo(f"  Found {len(folders)} folders in reMarkable Cloud.")
         choices = [{"name": "(Root) - notebooks not in any folder", "value": "(Root)"}]
         choices += [{"name": folder, "value": folder} for folder in folders]
@@ -947,7 +986,7 @@ def _configure_cloud_auth(inquirer) -> bool:
     try:
         click.echo()
         click.secho("  reMarkable Cloud setup", bold=True)
-        click.echo("  Cloud access is unofficial, read-only, and requires Python 3.12+.")
+        click.echo("  Cloud access uses reMarkable's desktop-app API.")
         click.echo("  Without Connect, files inactive for 50 days may be absent from cloud.")
         click.echo("  Missing cloud files are never deleted from your local backup.")
         click.echo()

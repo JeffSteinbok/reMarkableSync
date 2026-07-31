@@ -554,6 +554,13 @@ class TestFileLock:
         lock.release()
         assert not (tmp_path / ".test.lock").exists()
 
+    def test_acquire_creates_parent_directory(self, tmp_path):
+        from src.commands.watch_command import FileLock
+
+        lock = FileLock(tmp_path / "new" / "backup" / ".test.lock")
+        assert lock.acquire() is True
+        lock.release()
+
     def test_double_acquire_fails(self, tmp_path):
         from src.commands.watch_command import FileLock
 

@@ -85,7 +85,7 @@ def run_pipeline(
     folder_filter = config.get("folders", []) or None
 
     if use_cloud:
-        conn_label = "reMarkable Cloud (unofficial API, read-only)"
+        conn_label = "reMarkable Cloud"
     elif use_wifi:
         conn_label = f"Wi-Fi ({wifi_host or 'auto-discover'})"
     else:

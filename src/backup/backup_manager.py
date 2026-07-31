@@ -88,7 +88,10 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
         elif use_cloud:
             from .cloud_connection import ReMarkableCloudConnection
 
-            self.connection = ReMarkableCloudConnection(tablet_config=tablet_config)
+            self.connection = ReMarkableCloudConnection(
+                tablet_config=tablet_config,
+                missing_policy=self._get_config().get("cloud_missing_policy", "keep"),
+            )
         else:
             self.connection = ReMarkableConnection(
                 password=password,
@@ -224,6 +227,8 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
                 logging.warning("No files found on reMarkable tablet")
                 return True, set(), {}
 
+            all_remote_files = list(remote_files)
+
             # Apply folder filter — only sync files belonging to allowed UUIDs
             if allowed_uuids is not None:
 
@@ -253,6 +258,12 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
                 if self.metadata.should_sync_file(remote_file, local_path):
                     files_to_sync.append((remote_file, local_path))
 
+            self.connection.reconcile_missing_files(
+                self.files_dir,
+                self.remote_xochitl_dir,
+                all_remote_files,
+            )
+
             if not files_to_sync:
                 print("  All files are up to date")
                 logging.info("All files are up to date")
@@ -271,7 +282,8 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
             with create_progress("Downloading") as progress:
                 task = progress.add_task("Downloading", total=len(files_to_sync))
 
-                for remote_file, local_path in files_to_sync:
+                total_files = len(files_to_sync)
+                for file_number, (remote_file, local_path) in enumerate(files_to_sync, start=1):
                     try:
                         # Create local directory if needed
                         local_path.parent.mkdir(parents=True, exist_ok=True)
@@ -314,6 +326,12 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
                                 updated_pages[notebook_uuid].add(page_id)
 
                         progress.update(task, advance=1, description=local_path.name[:40])
+                        logging.info(
+                            "Backup: %s (file %d/%d)",
+                            local_path.name,
+                            file_number,
+                            total_files,
+                        )
 
                     except (OSError, SCPException) as e:
                         print_error(f"  ERR - Failed to download {remote_file['path']}: {e}")

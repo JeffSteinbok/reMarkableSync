@@ -10,6 +10,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+STATUS_ICON_NAME = "menu bar icon" if sys.platform == "darwin" else "system tray icon"
+
 # Force UTF-8 output on Windows to avoid cp1252 encoding errors
 if sys.platform == "win32":
     os.environ.setdefault("PYTHONIOENCODING", "utf-8")
@@ -19,8 +21,8 @@ if sys.platform == "win32":
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 # Check Python version before importing anything else
-if sys.version_info < (3, 11):
-    print("Error: RemarkableSync requires Python 3.11 or higher.")
+if sys.version_info < (3, 12):
+    print("Error: RemarkableSync requires Python 3.12 or higher.")
     print(
         f"You are using Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
     )
@@ -814,7 +816,7 @@ def check_update():
     "--systray/--no-systray",
     default=True,
     show_default=True,
-    help="Show a system tray icon while watch mode is running",
+    help=f"Show a {STATUS_ICON_NAME} while watch mode is running",
 )
 @click.option(
     "--foreground", is_flag=True, default=False, help="Run in the foreground instead of detaching"
@@ -831,7 +833,7 @@ def watch(
     wifi_host: str,
     use_cloud: bool,
 ):
-    """Run periodic sync in the background with a system tray icon.
+    """Run periodic sync in the background with a status icon.
 
     Reads all settings from the config file (run ``config`` first).
     The tray menu lets you change the interval, trigger an immediate sync,
@@ -892,7 +894,7 @@ def watch(
         test_lock = FileLock(process_lock_path)
         if not test_lock.acquire():
             click.echo("reMarkableSync watch is already running.")
-            click.echo("Use the system tray icon to control it.")
+            click.echo(f"Use the {STATUS_ICON_NAME} to control it.")
             return
         test_lock.release()  # Release so the child can acquire it
 
@@ -1031,7 +1033,7 @@ def _detach_watch():
         )
 
     click.echo("reMarkableSync watch started in the background.")
-    click.echo("Use the system tray icon to control it.")
+    click.echo(f"Use the {STATUS_ICON_NAME} to control it.")
 
 
 # ---------------------------------------------------------------------------

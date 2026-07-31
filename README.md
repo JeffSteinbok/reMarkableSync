@@ -30,7 +30,7 @@ A comprehensive Python toolkit for backing up reMarkable tablet notebooks, conve
 
 ## Features
 
-- **USB, Wi-Fi & cloud sync** — use the tablet directly or the unofficial read-only cloud API
+- **USB, Wi-Fi & cloud sync** — use the tablet directly or sync without it through the cloud
 - **Incremental backup** — only downloads files that have changed (tracked by size, mtime, and MD5)
 - **PDF conversion** — v5 and v6 .rm formats with template backgrounds, folder hierarchy preserved
 - **AI handwriting recognition** — send page images to GitHub Models (GPT-4o), Claude, or Google Gemini
@@ -92,7 +92,7 @@ This will use your configured defaults and launch a sync cycle (backup → PDF �
 
 ### 4. Set it to run at startup
 
-Once you're happy with the output, enable run-at-startup from the system tray icon menu (or via the watch command). reMarkableSync will sync your tablet automatically in the background whenever your computer is on.
+Once you're happy with the output, enable run-at-startup from the menu bar or system tray icon (or via the watch command). reMarkableSync will sync your tablet automatically in the background whenever your computer is on.
 
 > [!TIP]
 > **Obsidian users:** Point the Markdown output directory at a folder inside your Obsidian vault. Your handwritten notes appear as searchable Markdown with embedded page images. Pair with [Obsidian OneDrive Sync](https://github.com/JeffSteinbok/obsidian-onedrive) to sync your vault across devices.
@@ -153,7 +153,7 @@ All commands read defaults from the saved config. CLI flags override config valu
 - `--host HOST` — tablet IP (default: `10.11.99.1`)
 - `--wifi` — connect over Wi-Fi
 - `--wifi-host HOST` — tablet Wi-Fi IP (auto-discovered if omitted)
-- `--cloud` — use the unofficial read-only reMarkable Cloud API
+- `--cloud` — use the reMarkable Cloud API
 
 **Backup:**
 - `-p, --password` — SSH password (prompted if not saved)
@@ -178,7 +178,7 @@ All commands read defaults from the saved config. CLI flags override config valu
 
 **Watch:**
 - `-i, --interval N` — minutes between syncs (default: 30)
-- `--systray / --no-systray` — system tray icon (default: enabled)
+- `--systray / --no-systray` — menu bar or system tray icon (default: enabled)
 
 **Updates:**
 - `reMarkableSync check-update` — check for newer versions
@@ -200,7 +200,7 @@ The config wizard can enable Wi-Fi SSH on your tablet automatically via USB. If 
 
 Cloud mode downloads the same raw notebook structure used by device backups and stores its
 device token in the system keyring. It is read-only and never uploads, renames, moves, or
-deletes cloud content. Cloud mode requires Python 3.12 or newer.
+deletes cloud content.
 
 To configure it:
 
@@ -209,7 +209,11 @@ To configure it:
 3. Sign in and create a code for a new desktop app.
 4. Enter the 8-character code in the wizard.
 5. The wizard verifies access and stores the resulting device token in the system keyring.
-6. Optionally wait for the cloud folder list and select which folders to sync.
+6. Choose how missing cloud files should be handled:
+   - **Ignore missing files** and keep the local backup (default).
+   - **Treat them as deleted** by moving previously cloud-synced files into a timestamped
+     `Cloud Archive` directory. Nothing is permanently deleted.
+7. Optionally wait for the cloud folder list and select which folders to sync.
 
 The pairing code is temporary and is not stored. Future runs reuse the keyring token.
 
@@ -217,6 +221,14 @@ Without a Connect subscription, files inactive for more than 50 days may stop ap
 the cloud until opened again on the tablet. A missing cloud item is therefore treated as
 unavailable, **not deleted**: cloud sync only adds or updates files and never removes an
 existing local backup. Built-in system templates are only available through device sync.
+
+The wizard explains the tradeoffs before asking:
+
+| Mode | Advantages | Limitations |
+|------|------------|-------------|
+| **USB** | Most reliable direct connection; includes built-in templates | Requires a cable and SSH/developer access |
+| **Wi-Fi** | No cable required; includes built-in templates | Requires the same network and Wi-Fi SSH |
+| **Cloud API** | Works without the tablet nearby | Slower, no system templates, and potentially incomplete without Connect |
 
 ## Generated Markdown Format
 
@@ -267,6 +279,7 @@ reMarkableSync is built on top of these excellent open-source projects:
 
 | Library | Role |
 |---------|------|
+| [remarkapy](https://pypi.org/project/remarkapy/) | Provides reMarkable Cloud authentication and downloads |
 | [rmc](https://github.com/ricklupton/rmc) | Converts reMarkable v6 `.rm` files to SVG |
 | [svglib](https://github.com/deeplook/svglib) | Converts SVG to ReportLab drawings |
 | [ReportLab](https://github.com/MrBitBucket/reportlab-mirror) | Renders drawings and templates to PDF |

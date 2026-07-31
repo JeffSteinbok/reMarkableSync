@@ -3,6 +3,8 @@
 import json
 import logging
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -25,6 +27,7 @@ class ReMarkableCloudConnection:
         credential_store: Optional[CredentialStoreProtocol] = None,
         tablet_config: Optional[TabletConfig] = None,
         client: Any = None,
+        missing_policy: str = "keep",
     ):
         self.host = "cloud.remarkable.com"
         self.username = "cloud"
@@ -35,6 +38,9 @@ class ReMarkableCloudConnection:
         self._tablet_config = tablet_config or DEFAULT_TABLET_CONFIG
         self._client = client
         self._owns_client = client is None
+        if missing_policy not in {"keep", "archive"}:
+            raise ValueError(f"Unsupported cloud missing-file policy: {missing_policy}")
+        self.missing_policy = missing_policy
         self._files: Dict[str, Tuple[Any, Any]] = {}
         self._items: Dict[str, Any] = {}
         self._bundles: Dict[str, Dict[str, bytes]] = {}
@@ -73,7 +79,7 @@ class ReMarkableCloudConnection:
                 from remarkapy.exceptions import RemarkableAPIError
             except ImportError:
                 click.echo(
-                    "[ERROR] Cloud sync requires Python 3.12+ and the 'remarkapy' package.",
+                    "[ERROR] Cloud sync requires the 'remarkapy' package.",
                     err=True,
                 )
                 return False
@@ -89,7 +95,7 @@ class ReMarkableCloudConnection:
                 if not device_token:
                     if pairing_code is None:
                         click.echo(
-                            "  Cloud access uses reMarkable's unofficial desktop-app API.\n"
+                            "  Cloud access uses reMarkable's desktop-app API.\n"
                             "  Create a one-time code at: "
                             "https://my.remarkable.com/device/desktop/connect"
                         )
@@ -136,7 +142,7 @@ class ReMarkableCloudConnection:
         blocks = []
         for item in sorted(self._items.values(), key=lambda value: value.id):
             metadata = {
-                "lastModified": item.lastModified,
+                "lastModified": str(self._mtime_for(item) * 1000),
                 "parent": item.parent,
                 "type": item.type,
                 "visibleName": item.visibleName,
@@ -144,6 +150,16 @@ class ReMarkableCloudConnection:
             blocks.append(f"FILE:{item.id}")
             blocks.append(json.dumps(metadata))
         return "\n".join(blocks), "", 0
+
+    def list_top_level_folders(self) -> List[str]:
+        """Return cloud folders without building the full backup file index."""
+        if not self.authenticate():
+            return []
+        return sorted(
+            item.visibleName
+            for item in self._client.list_items(refresh=True)
+            if item.type == "CollectionType" and not item.parent
+        )
 
     def list_files(self, remote_path: str) -> List[Dict]:
         """List raw cloud document files using tablet-compatible virtual paths."""
@@ -182,16 +198,65 @@ class ReMarkableCloudConnection:
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes(data)
 
+    def reconcile_missing_files(
+        self,
+        local_root: Path,
+        remote_root: str,
+        remote_files: List[Dict],
+    ) -> List[Path]:
+        """Keep or archive files absent from the latest successful cloud listing."""
+        inventory_path = local_root.parent / "cloud_inventory.json"
+        previous = self._load_inventory(inventory_path)
+        current = {
+            str(Path(file["path"]).relative_to(remote_root))
+            for file in remote_files
+            if file["path"].startswith(remote_root.rstrip("/") + "/")
+        }
+
+        archived: List[Path] = []
+        archive_root: Optional[Path] = None
+        if self.missing_policy == "archive" and previous:
+            for relative_text in sorted(previous - current):
+                relative = Path(relative_text)
+                if relative.is_absolute() or ".." in relative.parts:
+                    logging.warning("Ignoring unsafe cloud inventory path: %s", relative_text)
+                    continue
+                source = local_root / relative
+                if not source.is_file():
+                    continue
+                if archive_root is None:
+                    archive_root = self._new_archive_root(local_root.parent)
+                destination = archive_root / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                source.replace(destination)
+                archived.append(destination)
+
+            if archived:
+                print_warn(
+                    f"  WRN - Treated {len(archived)} missing cloud files as deleted; "
+                    f"moved them to {archive_root}"
+                )
+
+        self._save_inventory(inventory_path, current)
+        return archived
+
     def _build_file_index(self) -> None:
         self._files.clear()
         self._items.clear()
         xochitl = self._tablet_config.xochitl_dir.rstrip("/")
 
-        for item in self._client.list_hydrated_items(refresh=True):
-            if item.type == "TemplateType":
-                continue
+        items = [
+            item for item in self._client.list_items(refresh=True) if item.type != "TemplateType"
+        ]
+        worker_count = min(16, len(items))
+        with ThreadPoolExecutor(max_workers=worker_count or 1) as executor:
+            manifests = executor.map(
+                lambda item: self._client.get_entries(item.hash, manifest_id=item.id),
+                items,
+            )
+
+        for item, manifest in zip(items, manifests):
             self._items[item.id] = item
-            manifest = self._client.get_entries(item.hash, manifest_id=item.id)
             for file_ref in manifest.entries:
                 self._files[f"{xochitl}/{file_ref.id}"] = (item, file_ref)
 
@@ -207,8 +272,42 @@ class ReMarkableCloudConnection:
         return bundle
 
     @staticmethod
+    def _load_inventory(path: Path) -> set[str]:
+        if not path.exists():
+            return set()
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            logging.warning("Could not read cloud inventory: %s", path)
+            return set()
+        files = data.get("files", [])
+        if not isinstance(files, list):
+            return set()
+        return {value for value in files if isinstance(value, str)}
+
+    @staticmethod
+    def _save_inventory(path: Path, files: set[str]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(
+            json.dumps({"version": 1, "files": sorted(files)}, indent=2),
+            encoding="utf-8",
+        )
+        temporary.replace(path)
+
+    @staticmethod
+    def _new_archive_root(backup_root: Path) -> Path:
+        base = backup_root / "Cloud Archive" / datetime.now().strftime("%Y%m%d-%H%M%S")
+        candidate = base
+        suffix = 2
+        while candidate.exists():
+            candidate = Path(f"{base}-{suffix}")
+            suffix += 1
+        return candidate
+
+    @staticmethod
     def _mtime_for(item: Any) -> int:
         try:
             return int(item.lastModified) // 1000
-        except (TypeError, ValueError):
-            return 0
+        except (AttributeError, TypeError, ValueError):
+            return int(item.hash[:16], 16)

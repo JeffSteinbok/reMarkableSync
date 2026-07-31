@@ -70,7 +70,7 @@ A complete build and distribution system that packages RemarkableSync as self-co
 - **Platform-specific** - macOS can create .app bundles
 
 ### Dependencies Bundled
-- Python 3.11 runtime
+- Python 3.12 runtime
 - paramiko, scp (for SSH/SCP connections)
 - click, tqdm (for CLI interface)
 - cryptography (for secure connections)
@@ -173,7 +173,7 @@ Developer                    GitHub Actions              End User
 - Add missing modules to the list
 
 ### Executable doesn't run
-- Verify Python version used for build (3.7+)
+- Verify Python version used for build (3.12+)
 - Check PyInstaller version (latest recommended)
 - Review build logs for errors
 

@@ -12,6 +12,7 @@ This is a facade that orchestrates:
 
 import logging
 import socket
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import click
@@ -346,3 +347,13 @@ class ReMarkableConnection:
             self.scp_client.get(remote_path, local_path, recursive=True)
             return
         self._session.get_file(remote_path, local_path)
+
+    def reconcile_missing_files(
+        self,
+        local_root: Path,
+        remote_root: str,
+        remote_files: List[Dict],
+    ) -> List[Path]:
+        """Device sync never interprets absent files as deletions."""
+        del local_root, remote_root, remote_files
+        return []

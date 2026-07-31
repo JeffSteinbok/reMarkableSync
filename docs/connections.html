@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Compare reMarkableSync USB, Wi-Fi, and Cloud connections.">
+    <title>Choosing a Connection Method — reMarkableSync</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+    <style>
+        :root {
+            --night: #11111b;
+            --night-light: #181825;
+            --surface: #1e1e2e;
+            --surface-light: #262637;
+            --border: #313244;
+            --border-light: #45475a;
+            --text: #cdd6f4;
+            --text-dim: #a6adc8;
+            --text-muted: #6c7086;
+            --accent: #89b4fa;
+            --green: #a6e3a1;
+            --yellow: #f9e2af;
+            --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--night);
+            color: var(--text);
+            line-height: 1.7;
+        }
+
+        nav {
+            position: fixed;
+            inset: 0 0 auto;
+            z-index: 50;
+            background: rgba(17, 17, 27, 0.9);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .nav-inner {
+            max-width: 1100px;
+            height: 56px;
+            margin: 0 auto;
+            padding: 0 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .nav-logo {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            color: var(--text);
+            font-size: 1.1rem;
+            font-weight: 700;
+            text-decoration: none;
+        }
+
+        .nav-logo:hover, a { color: var(--accent); }
+        .nav-logo img { width: 28px; height: 28px; border-radius: 6px; }
+        .nav-links { display: flex; gap: 2rem; }
+        .nav-links a { color: var(--text-dim); font-size: 0.9rem; text-decoration: none; }
+        .nav-links a:hover { color: var(--text); }
+
+        main {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 5rem 2rem 4rem;
+        }
+
+        h1 { margin-bottom: 0.5rem; font-size: 2rem; }
+        h2 {
+            margin: 3rem 0 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border);
+            font-size: 1.4rem;
+        }
+        h3 { margin-bottom: 0.6rem; font-size: 1.15rem; }
+        p { margin-bottom: 1rem; color: var(--text-dim); }
+        strong { color: var(--text); }
+        code {
+            padding: 0.1rem 0.35rem;
+            border-radius: 4px;
+            background: var(--surface-light);
+            color: var(--green);
+            font-family: var(--mono);
+        }
+
+        .subtitle { margin-bottom: 2rem; font-size: 1.05rem; }
+
+        .summary {
+            width: 100%;
+            margin: 1.5rem 0;
+            border-collapse: collapse;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+
+        .summary th, .summary td {
+            padding: 0.8rem 1rem;
+            border-bottom: 1px solid var(--border);
+            text-align: left;
+            vertical-align: top;
+        }
+
+        .summary th { background: var(--surface); color: var(--text); }
+        .summary td { color: var(--text-dim); }
+        .summary tr:last-child td { border-bottom: 0; }
+
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .card {
+            padding: 1.25rem;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: var(--surface);
+        }
+
+        .card ul { padding-left: 1.2rem; color: var(--text-dim); }
+        .card li { margin-bottom: 0.45rem; }
+        .label {
+            display: inline-block;
+            margin: 0.7rem 0 0.35rem;
+            color: var(--green);
+            font-size: 0.8rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+        .label.limitations { color: var(--yellow); }
+
+        .callout {
+            margin-top: 1.5rem;
+            padding: 1rem 1.2rem;
+            border-left: 3px solid var(--yellow);
+            border-radius: 0 8px 8px 0;
+            background: var(--surface);
+            color: var(--text-dim);
+        }
+
+        footer {
+            padding: 2rem;
+            border-top: 1px solid var(--border);
+            color: var(--text-muted);
+            text-align: center;
+            font-size: 0.85rem;
+        }
+
+        @media (max-width: 640px) {
+            .nav-links { gap: 1rem; }
+            .nav-links a:first-child { display: none; }
+            main { padding: 4.5rem 1rem 3rem; }
+            .summary { display: block; overflow-x: auto; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="nav-inner">
+            <a href="index.html" class="nav-logo">
+                <img src="icon-192.png" alt="">
+                reMarkableSync
+            </a>
+            <div class="nav-links">
+                <a href="index.html#features">Features</a>
+                <a href="index.html#install">Install</a>
+                <a href="index.html#using">Usage</a>
+                <a href="advanced.html">Advanced</a>
+            </div>
+        </div>
+    </nav>
+
+    <main>
+        <h1>Choosing a Connection Method</h1>
+        <p class="subtitle">reMarkableSync can access your notebooks through USB, Wi-Fi, or reMarkable Cloud. All three methods download your data without modifying the tablet or cloud.</p>
+
+        <table class="summary">
+            <thead>
+                <tr>
+                    <th>Method</th>
+                    <th>Best for</th>
+                    <th>Main limitation</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>USB</strong></td>
+                    <td>The most reliable and complete direct backup</td>
+                    <td>Requires a cable and SSH/developer access</td>
+                </tr>
+                <tr>
+                    <td><strong>Wi-Fi</strong></td>
+                    <td>Direct backups without connecting a cable</td>
+                    <td>The computer and tablet must share a network</td>
+                </tr>
+                <tr>
+                    <td><strong>Cloud</strong></td>
+                    <td>Syncing while the tablet is unavailable or elsewhere</td>
+                    <td>May not show older inactive files without Connect</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="cards">
+            <section class="card">
+                <h3>USB</h3>
+                <p>Connect directly to the tablet with a USB cable.</p>
+                <div class="label">Advantages</div>
+                <ul>
+                    <li>Most reliable connection</li>
+                    <li>Works without internet or local Wi-Fi</li>
+                    <li>Includes built-in system templates</li>
+                    <li>Provides the complete data currently stored on the tablet</li>
+                </ul>
+                <div class="label limitations">Limitations</div>
+                <ul>
+                    <li>Requires the tablet and a USB cable</li>
+                    <li>Requires SSH/developer access to be enabled</li>
+                </ul>
+            </section>
+
+            <section class="card">
+                <h3>Wi-Fi</h3>
+                <p>Connect directly to the tablet over its local network address.</p>
+                <div class="label">Advantages</div>
+                <ul>
+                    <li>No cable required</li>
+                    <li>Includes built-in system templates</li>
+                    <li>Provides the complete data currently stored on the tablet</li>
+                </ul>
+                <div class="label limitations">Limitations</div>
+                <ul>
+                    <li>Requires the tablet to be nearby and online</li>
+                    <li>Both devices must be on the same network</li>
+                    <li>Requires Wi-Fi SSH access</li>
+                </ul>
+            </section>
+
+            <section class="card">
+                <h3>Cloud</h3>
+                <p>Download notebooks from reMarkable's servers using desktop-app authentication.</p>
+                <div class="label">Advantages</div>
+                <ul>
+                    <li>The tablet does not need to be nearby or online</li>
+                    <li>Works from any internet connection</li>
+                    <li>Uses a one-time pairing flow and securely saved device token</li>
+                </ul>
+                <div class="label limitations">Limitations</div>
+                <ul>
+                    <li>Usually slower than a direct connection</li>
+                    <li>Built-in system templates are not available</li>
+                    <li>Requires internet access and reMarkable Cloud availability</li>
+                    <li>Without Connect, inactive files may disappear from listings after 50 days</li>
+                </ul>
+            </section>
+        </div>
+
+        <h2>Which should I choose?</h2>
+        <p><strong>Choose USB</strong> when reliability and a complete tablet snapshot matter most. <strong>Choose Wi-Fi</strong> for the same direct access without a cable. <strong>Choose Cloud</strong> when the tablet is not nearby or you want sync to run independently of it.</p>
+        <p>You can change the method later by running <code>reMarkableSync config</code> again.</p>
+
+        <div class="callout">
+            <strong>Cloud retention:</strong> without a Connect subscription, files inactive for more than 50 days may stop appearing in cloud listings until they are reopened on the tablet. The wizard lets you retain missing local files or move previously tracked files into a reversible Cloud Archive.
+        </div>
+
+        <h2>Configure reMarkableSync</h2>
+        <p>Run <code>reMarkableSync config</code>, select a connection method, and follow the prompts. For cloud pairing instructions, see <a href="advanced.html#cloud-setup">Cloud Setup</a>.</p>
+    </main>
+
+    <footer>
+        reMarkableSync is an independent open-source project and is not affiliated with reMarkable.
+    </footer>
+</body>
+</html>

@@ -52,10 +52,16 @@ class FakeClient:
             },
         }
         self.closed = False
+        self.list_items_called = False
 
     def list_hydrated_items(self, refresh=False):
         assert refresh is True
         return [self.folder, self.document]
+
+    def list_items(self, refresh=False):
+        assert refresh is True
+        self.list_items_called = True
+        return [self.document, self.folder]
 
     def get_entries(self, item_hash, manifest_id=None):
         del item_hash
@@ -92,6 +98,7 @@ def test_cloud_connection_exposes_tablet_compatible_paths(tmp_path):
     page_path = next(path for path in paths if path.endswith("/page-1.rm"))
     connection.get(page_path, str(destination))
     assert destination.read_bytes() == b"raw strokes"
+    assert client.list_items_called is True
 
 
 def test_cloud_connection_supports_folder_metadata_scan():
@@ -106,6 +113,20 @@ def test_cloud_connection_supports_folder_metadata_scan():
     assert stderr == ""
     assert "FILE:folder-uuid" in stdout
     assert '"visibleName": "Work"' in stdout
+
+
+def test_cloud_connection_lists_folders_without_full_hydration():
+    client = FakeClient()
+    connection = ReMarkableCloudConnection(client=client)
+
+    assert connection.list_top_level_folders() == ["Work"]
+    assert client.list_items_called is True
+
+
+def test_cloud_connection_uses_hash_when_lightweight_item_has_no_timestamp():
+    item = SimpleNamespace(hash="0123456789abcdef")
+
+    assert ReMarkableCloudConnection._mtime_for(item) == int(item.hash, 16)
 
 
 def test_cloud_connection_does_not_expose_system_templates():
@@ -128,3 +149,59 @@ def test_cloud_connection_missing_file_does_not_touch_destination(tmp_path):
         )
 
     assert destination.read_text() == "keep"
+
+
+def test_cloud_connection_keep_policy_retains_missing_files(tmp_path):
+    connection = ReMarkableCloudConnection(client=FakeClient(), missing_policy="keep")
+    local_root = tmp_path / "Notebooks"
+    local_file = local_root / "folder-uuid.metadata"
+    local_file.parent.mkdir(parents=True)
+    local_file.write_text("keep")
+
+    connection.reconcile_missing_files(
+        local_root,
+        "/remote",
+        [{"path": "/remote/folder-uuid.metadata"}],
+    )
+    archived = connection.reconcile_missing_files(local_root, "/remote", [])
+
+    assert archived == []
+    assert local_file.read_text() == "keep"
+
+
+def test_cloud_connection_archive_policy_moves_previously_synced_missing_files(tmp_path):
+    connection = ReMarkableCloudConnection(client=FakeClient(), missing_policy="archive")
+    local_root = tmp_path / "Notebooks"
+    local_file = local_root / "folder-uuid.metadata"
+    local_file.parent.mkdir(parents=True)
+    local_file.write_text("archive me")
+
+    connection.reconcile_missing_files(
+        local_root,
+        "/remote",
+        [{"path": "/remote/folder-uuid.metadata"}],
+    )
+    archived = connection.reconcile_missing_files(local_root, "/remote", [])
+
+    assert not local_file.exists()
+    assert len(archived) == 1
+    assert archived[0].read_text() == "archive me"
+    assert "Cloud Archive" in archived[0].parts
+
+
+def test_cloud_connection_archive_policy_ignores_untracked_local_files(tmp_path):
+    connection = ReMarkableCloudConnection(client=FakeClient(), missing_policy="archive")
+    local_root = tmp_path / "Notebooks"
+    local_file = local_root / "local-only.metadata"
+    local_file.parent.mkdir(parents=True)
+    local_file.write_text("local")
+
+    archived = connection.reconcile_missing_files(local_root, "/remote", [])
+
+    assert archived == []
+    assert local_file.read_text() == "local"
+
+
+def test_cloud_connection_rejects_unknown_missing_policy():
+    with pytest.raises(ValueError, match="Unsupported cloud missing-file policy"):
+        ReMarkableCloudConnection(client=FakeClient(), missing_policy="delete")
