@@ -39,6 +39,7 @@ def run_pipeline(
     embed_images: bool = True,
     host: str = USB_HOST,
     use_wifi: bool = False,
+    use_cloud: bool = False,
     wifi_host: str = "",
 ) -> int:
     """Run the full pipeline: backup → PDF → OCR/AI → Markdown export.
@@ -61,6 +62,7 @@ def run_pipeline(
         embed_images: Embed page image attachments in notes.
         host: Tablet USB IP/hostname.
         use_wifi: Use Wi-Fi connection.
+        use_cloud: Download from reMarkable Cloud.
         wifi_host: Wi-Fi IP/hostname.
 
     Returns:
@@ -82,7 +84,12 @@ def run_pipeline(
         return 1
     folder_filter = config.get("folders", []) or None
 
-    conn_label = f"Wi-Fi ({wifi_host or 'auto-discover'})" if use_wifi else f"USB ({host})"
+    if use_cloud:
+        conn_label = "reMarkable Cloud (unofficial API, read-only)"
+    elif use_wifi:
+        conn_label = f"Wi-Fi ({wifi_host or 'auto-discover'})"
+    else:
+        conn_label = f"USB ({host})"
 
     print()
     print("=" * 70)
@@ -114,6 +121,7 @@ def run_pipeline(
             password=password,
             host=host,
             use_wifi=use_wifi,
+            use_cloud=use_cloud,
             wifi_host=wifi_host,
             pre_sync_command=pre_sync_cmd,
             post_sync_command=post_sync_cmd,

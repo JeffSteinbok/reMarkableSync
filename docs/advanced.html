@@ -232,6 +232,7 @@
         <p>The default workflow — backs up your tablet and converts any updated notebooks to PDF.</p>
         <pre><code>reMarkableSync sync                    # USB connection
 reMarkableSync sync --wifi             # Wi-Fi connection
+reMarkableSync sync --cloud            # Read-only cloud connection
 reMarkableSync sync --force-backup     # Re-download all files
 reMarkableSync sync --force-convert    # Re-convert all notebooks</code></pre>
 
@@ -239,6 +240,7 @@ reMarkableSync sync --force-convert    # Re-convert all notebooks</code></pre>
             <tr><th>Option</th><th>Description</th></tr>
             <tr><td><code>--wifi</code></td><td>Use Wi-Fi instead of USB</td></tr>
             <tr><td><code>--wifi-host HOST</code></td><td>Specify Wi-Fi IP/hostname (default: auto-discover)</td></tr>
+            <tr><td><code>--cloud</code></td><td>Use the unofficial read-only reMarkable Cloud API</td></tr>
             <tr><td><code>--force-backup</code></td><td>Force full backup, ignoring incremental state</td></tr>
             <tr><td><code>--force-convert</code></td><td>Re-convert all notebooks to PDF</td></tr>
             <tr><td><code>--skip-templates</code></td><td>Skip backing up template files</td></tr>
@@ -261,9 +263,10 @@ reMarkableSync watch --interval 300    # Sync every 5 minutes</code></pre>
         </ul>
 
         <h3>reMarkableSync backup</h3>
-        <p>Only download files from the tablet — no conversion.</p>
+        <p>Only download files from the tablet or cloud — no conversion.</p>
         <pre><code>reMarkableSync backup
-reMarkableSync backup --wifi --force-backup</code></pre>
+reMarkableSync backup --wifi --force-backup
+reMarkableSync backup --cloud --skip-templates</code></pre>
 
         <h3>reMarkableSync convert</h3>
         <p>Only convert already-backed-up notebooks to PDF — no tablet connection needed.</p>
@@ -296,7 +299,21 @@ reMarkableSync convert --force-convert</code></pre>
 
         <h2>Configuration</h2>
         <p>Settings are stored in <code>&lt;AppData&gt;/remarkablesync/config.json</code>. You can edit this file directly or re-run <code>reMarkableSync config</code> at any time.</p>
-        <p>Sensitive values (SSH password, AI API keys) are stored in your system keyring — never in the config file.</p>
+        <p>Sensitive values (SSH password, cloud device token, AI API keys) are stored in your system keyring — never in the config file.</p>
+
+        <h2>Cloud Setup</h2>
+        <p>Cloud mode uses reMarkable's unofficial desktop-app API. It is read-only and requires Python 3.12 or newer.</p>
+        <ol style="color: var(--text-dim); margin-bottom: 1rem; padding-left: 1.5rem;">
+            <li>Run <code>reMarkableSync config</code> and select <strong>Cloud</strong>.</li>
+            <li>Open <a href="https://my.remarkable.com/device/desktop/connect" target="_blank" rel="noopener noreferrer">my.remarkable.com/device/desktop/connect</a>.</li>
+            <li>Sign in and create a code for a new desktop app.</li>
+            <li>Enter the 8-character code in the wizard.</li>
+            <li>The wizard verifies access and stores the resulting device token in your system keyring.</li>
+            <li>Optionally wait for folder discovery and choose which cloud folders to sync.</li>
+        </ol>
+        <p>The temporary pairing code is never stored. Later runs reuse the device token from the keyring.</p>
+        <p><strong>Important:</strong> without a Connect subscription, files inactive for more than 50 days may stop appearing in the cloud until reopened on the tablet. Missing cloud entries are treated as unavailable, not deleted. Cloud sync only adds or updates local files and never removes an existing backup.</p>
+        <p>Built-in system templates are not exposed by the cloud API and remain available only through USB or Wi-Fi device sync.</p>
 
         <h2>Custom OCR Instructions</h2>
         <p>You can customize how the AI transcribes your handwriting by providing a Markdown file with additional instructions. This is useful for:</p>

@@ -337,3 +337,12 @@ class ReMarkableConnection:
             return files
 
         return []
+
+    def get(self, remote_path: str, local_path: str, recursive: bool = False) -> None:
+        """Download a file from the tablet."""
+        if recursive:
+            if not self.scp_client:
+                raise ConnectionError("Not connected")
+            self.scp_client.get(remote_path, local_path, recursive=True)
+            return
+        self._session.get_file(remote_path, local_path)

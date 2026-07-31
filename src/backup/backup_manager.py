@@ -48,6 +48,7 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
         password: Optional[str] = None,
         host: str = "10.11.99.1",
         use_wifi: bool = False,
+        use_cloud: bool = False,
         wifi_host: str = "",
         pre_sync_command: str = "",
         post_sync_command: str = "",
@@ -62,6 +63,7 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
             password: SSH password for tablet (prompted if not provided)
             host: Tablet IP/hostname (USB default: 10.11.99.1)
             use_wifi: Connect via Wi-Fi instead of USB
+            use_cloud: Download from reMarkable Cloud instead of the tablet
             wifi_host: Wi-Fi IP/hostname (auto-discovered if empty)
             pre_sync_command: Shell command to run before SSH connects.
             post_sync_command: Shell command to run after SSH disconnects.
@@ -83,6 +85,10 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
         # Use injected connection or create default
         if connection is not None:
             self.connection = connection
+        elif use_cloud:
+            from .cloud_connection import ReMarkableCloudConnection
+
+            self.connection = ReMarkableCloudConnection(tablet_config=tablet_config)
         else:
             self.connection = ReMarkableConnection(
                 password=password,
@@ -271,10 +277,7 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
                         local_path.parent.mkdir(parents=True, exist_ok=True)
 
                         # Download file
-                        if self.connection.scp_client is None:
-                            logging.error("SCP client not initialized")
-                            return False, set(), {}
-                        self.connection.scp_client.get(remote_file["path"], str(local_path))
+                        self.connection.get(remote_file["path"], str(local_path))
 
                         # Update metadata
                         self.metadata.update_file_metadata(remote_file, local_path)
@@ -367,10 +370,7 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
                     try:
                         local_path.parent.mkdir(parents=True, exist_ok=True)
 
-                        if self.connection.scp_client is None:
-                            logging.error("SCP client not initialized")
-                            return False
-                        self.connection.scp_client.get(remote_file["path"], str(local_path))
+                        self.connection.get(remote_file["path"], str(local_path))
 
                         self.metadata.update_file_metadata(remote_file, local_path)
 

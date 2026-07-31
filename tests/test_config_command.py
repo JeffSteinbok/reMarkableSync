@@ -2,7 +2,7 @@ import json
 import sys
 import types
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -155,6 +155,19 @@ class TestPrintConfigSummary:
 
         print_config_summary(cfg)
 
+    def test_prints_cloud_auth_storage(self, capsys):
+        """Cloud mode identifies keyring-backed authentication."""
+        from src.commands.config_command import print_config_summary
+
+        print_config_summary(
+            {
+                "connection_mode": "cloud",
+                "backup_dir": "/tmp/backup",
+            }
+        )
+
+        assert "device token in system keyring" in capsys.readouterr().out
+
     def test_prints_password_masked(self, capsys):
         """Password is shown as masked."""
         from src.commands.config_command import print_config_summary
@@ -257,6 +270,72 @@ class FakeInquirer:
 
     def checkbox(self, **_kwargs):
         return self._next()
+
+
+class TestConfigureCloudAuth:
+    """Tests for the cloud pairing step in the config wizard."""
+
+    @patch("src.backup.cloud_connection.ReMarkableCloudConnection")
+    def test_pairs_new_cloud_device(self, mock_connection_cls, capsys):
+        from src.commands.config_command import _configure_cloud_auth
+
+        connection = MagicMock()
+        connection.get_saved_password.return_value = None
+        connection.authenticate.return_value = True
+        mock_connection_cls.return_value = connection
+
+        result = _configure_cloud_auth(FakeInquirer(["abcdefgh"]))
+
+        assert result is True
+        connection.authenticate.assert_called_once_with(pairing_code="abcdefgh")
+        connection.disconnect.assert_called_once()
+        assert "token saved to keyring" in capsys.readouterr().out
+
+    @patch("src.backup.cloud_connection.ReMarkableCloudConnection")
+    def test_verifies_existing_cloud_token(self, mock_connection_cls, capsys):
+        from src.commands.config_command import _configure_cloud_auth
+
+        connection = MagicMock()
+        connection.get_saved_password.return_value = "saved-token"
+        connection.authenticate.return_value = True
+        mock_connection_cls.return_value = connection
+
+        result = _configure_cloud_auth(FakeInquirer([]))
+
+        assert result is True
+        connection.authenticate.assert_called_once_with()
+        connection.disconnect.assert_called_once()
+        assert "authentication verified" in capsys.readouterr().out
+
+    @patch("src.backup.cloud_connection.ReMarkableCloudConnection")
+    def test_rejects_invalid_pairing_code(self, mock_connection_cls, capsys):
+        from src.commands.config_command import _configure_cloud_auth
+
+        connection = MagicMock()
+        connection.get_saved_password.return_value = None
+        mock_connection_cls.return_value = connection
+
+        result = _configure_cloud_auth(FakeInquirer(["short"]))
+
+        assert result is False
+        connection.authenticate.assert_not_called()
+        connection.disconnect.assert_called_once()
+        assert "must be 8 characters" in capsys.readouterr().out
+
+    @patch("src.backup.cloud_connection.ReMarkableCloudConnection")
+    def test_reports_cloud_authentication_failure(self, mock_connection_cls, capsys):
+        from src.commands.config_command import _configure_cloud_auth
+
+        connection = MagicMock()
+        connection.get_saved_password.return_value = "expired-token"
+        connection.authenticate.side_effect = RuntimeError("token expired")
+        mock_connection_cls.return_value = connection
+
+        result = _configure_cloud_auth(FakeInquirer([]))
+
+        assert result is False
+        connection.disconnect.assert_called_once()
+        assert "token expired" in capsys.readouterr().out
 
 
 def test_run_config_command_without_ocr_preserves_embed_images():

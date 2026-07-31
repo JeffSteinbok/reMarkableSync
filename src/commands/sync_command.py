@@ -18,6 +18,7 @@ def run_sync_command(
     force_convert: bool = False,
     host: str = USB_HOST,
     use_wifi: bool = False,
+    use_cloud: bool = False,
     wifi_host: str = "",
 ) -> int:
     """Execute the sync command (backup + convert).
@@ -34,6 +35,7 @@ def run_sync_command(
         force_convert: Force convert all notebooks
         host: Tablet IP/hostname for USB connections
         use_wifi: Use Wi-Fi instead of USB
+        use_cloud: Download from reMarkable Cloud
         wifi_host: Wi-Fi IP/hostname of the tablet
 
     Returns:
@@ -53,7 +55,9 @@ def run_sync_command(
     print("=" * 70)
     print(f"Backup directory: {backup_dir.absolute()}")
 
-    if use_wifi:
+    if use_cloud:
+        print("Connection mode: reMarkable Cloud (unofficial API, read-only)")
+    elif use_wifi:
         print(f"Connection mode: Wi-Fi ({wifi_host or 'auto-discover'})")
     else:
         print(f"Connection mode: USB ({host})")
@@ -72,6 +76,7 @@ def run_sync_command(
         password=password,
         host=host,
         use_wifi=use_wifi,
+        use_cloud=use_cloud,
         wifi_host=wifi_host,
         pre_sync_command=config.get("pre_sync_command", "").strip(),
         post_sync_command=config.get("post_sync_command", "").strip(),

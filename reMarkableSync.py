@@ -59,11 +59,17 @@ _connection_options = [
         default="",
         help="Tablet Wi-Fi IP address or hostname (auto-discovered when empty).",
     ),
+    click.option(
+        "--cloud",
+        "use_cloud",
+        is_flag=True,
+        help="Download through the unofficial reMarkable Cloud API (read-only).",
+    ),
 ]
 
 
 def add_connection_options(func):
-    """Decorator that adds the three shared connection options to a command."""
+    """Decorator that adds the shared connection options to a command."""
     for option in reversed(_connection_options):
         func = option(func)
     return func
@@ -100,7 +106,10 @@ def print_header():
     header.append(f" v{__version__} ", style="white")
     header.append("📝🔄", style="")
     header.append(" by Jeff Steinbok\n", style="dim")
-    header.append("https://jeffsteinbok.github.io/reMarkableSync", style="link https://jeffsteinbok.github.io/reMarkableSync dim")
+    header.append(
+        "https://jeffsteinbok.github.io/reMarkableSync",
+        style="link https://jeffsteinbok.github.io/reMarkableSync dim",
+    )
 
     console.print(Panel(header, border_style=brand_blue, padding=(0, 2)))
     console.print(f"[dim]Log file:[/dim] [link=file://{log_file}]{log_file}[/link]")
@@ -203,6 +212,7 @@ def backup(
     host: str,
     use_wifi: bool,
     wifi_host: str,
+    use_cloud: bool,
 ):
     """Backup files from reMarkable tablet via USB or Wi-Fi.
 
@@ -221,6 +231,7 @@ def backup(
             force,
             host=host,
             use_wifi=use_wifi,
+            use_cloud=use_cloud,
             wifi_host=wifi_host,
         )
     )
@@ -296,6 +307,7 @@ def sync(
     host: str,
     use_wifi: bool,
     wifi_host: str,
+    use_cloud: bool,
 ):
     """Backup and convert in one command (default workflow).
 
@@ -318,6 +330,7 @@ def sync(
             force_convert,
             host=host,
             use_wifi=use_wifi,
+            use_cloud=use_cloud,
             wifi_host=wifi_host,
         )
     )
@@ -353,7 +366,10 @@ def sync(
 @click.option(
     "--ai-provider",
     default=None,
-    type=click.Choice(["", "claude", "anthropic", "github", "github_models", "google", "gemini"], case_sensitive=False),
+    type=click.Choice(
+        ["", "claude", "anthropic", "github", "github_models", "google", "gemini"],
+        case_sensitive=False,
+    ),
     help="AI provider for handwriting recognition",
 )
 @click.option("--ai-model", default="", help="Override AI model (provider-specific)")
@@ -405,6 +421,7 @@ def md(
     host: str,
     use_wifi: bool,
     wifi_host: str,
+    use_cloud: bool,
 ):
     """Export existing PDFs to Markdown with optional AI OCR.
 
@@ -465,6 +482,8 @@ def md(
 
     # Connection defaults from config
     cfg_conn = cfg.get("connection_mode", "usb")
+    if not use_cloud and cfg_conn == "cloud":
+        use_cloud = True
     if not use_wifi and cfg_conn == "wifi":
         use_wifi = True
     if not wifi_host:
@@ -490,6 +509,7 @@ def md(
             embed_images=embed_images,
             host=host,
             use_wifi=use_wifi,
+            use_cloud=use_cloud,
             wifi_host=wifi_host,
         )
     )
@@ -809,6 +829,7 @@ def watch(
     host: str,
     use_wifi: bool,
     wifi_host: str,
+    use_cloud: bool,
 ):
     """Run periodic sync in the background with a system tray icon.
 
@@ -891,6 +912,7 @@ def watch(
 
     # CLI flags act as overrides; everything else is read from config per cycle.
     cli_use_wifi = use_wifi
+    cli_use_cloud = use_cloud
     cli_wifi_host = wifi_host
 
     from src.keyring_store import KEY_CLAUDE_API_KEY, KEY_GITHUB_TOKEN, get_secret
@@ -904,6 +926,7 @@ def watch(
         sync_actions = c.get("sync_actions", ["backup", "pdf"])
 
         eff_use_wifi = cli_use_wifi
+        eff_use_cloud = cli_use_cloud or c.get("connection_mode", "usb") == "cloud"
         if not eff_use_wifi and c.get("connection_mode", "usb") == "wifi":
             eff_use_wifi = True
         eff_wifi_host = cli_wifi_host or c.get("wifi_host", "")
@@ -935,6 +958,7 @@ def watch(
                 embed_images=c.get("embed_images", True),
                 host=host,
                 use_wifi=eff_use_wifi,
+                use_cloud=eff_use_cloud,
                 wifi_host=eff_wifi_host,
             )
 
@@ -948,6 +972,7 @@ def watch(
             force_convert=False,
             host=host,
             use_wifi=eff_use_wifi,
+            use_cloud=eff_use_cloud,
             wifi_host=eff_wifi_host,
         )
 
@@ -1048,6 +1073,8 @@ def main():
             wifi_host = cfg.get("wifi_host", "")
             if wifi_host:
                 extra_args.extend(["--wifi-host", wifi_host])
+        elif conn == "cloud":
+            extra_args.append("--cloud")
 
         # Backup directory
         backup_dir = cfg.get("backup_dir", "")

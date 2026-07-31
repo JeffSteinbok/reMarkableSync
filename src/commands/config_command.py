@@ -54,7 +54,10 @@ def print_config_summary(cfg: dict, config_path=None) -> None:
     _row("Mode:", cfg.get("connection_mode", "usb").upper())
     if cfg.get("connection_mode") == "wifi":
         _row("Host:", cfg.get("wifi_host", "(not set)"))
-    _row("Password:", "••••••••" if cfg.get("password") else "(not set)")
+    if cfg.get("connection_mode") == "cloud":
+        _row("Auth:", "device token in system keyring")
+    else:
+        _row("Password:", "••••••••" if cfg.get("password_in_keyring") else "(not set)")
     if cfg.get("backup_dir"):
         _row_path("Backup:", cfg.get("backup_dir"))
     if cfg.get("pdf_dir"):
@@ -132,6 +135,10 @@ def _run_wizard(current, inquirer) -> int:
         choices=[
             {"name": "USB  (direct cable connection)", "value": "usb"},
             {"name": "WiFi (wireless network connection)", "value": "wifi"},
+            {
+                "name": "Cloud (unofficial reMarkable API, read-only)",
+                "value": "cloud",
+            },
         ],
         default=current.get("connection_mode", "usb"),
     ).execute()
@@ -212,7 +219,11 @@ def _run_wizard(current, inquirer) -> int:
 
     # 3. Password
     current_password = current.get("password", "")
-    if current_password:
+    if connection_mode == "cloud":
+        password = ""
+        if not _configure_cloud_auth(inquirer):
+            return 1
+    elif current_password:
         click.echo("  SSH password: (saved)")
         change_pw = inquirer.confirm(
             message="Do you want to change the SSH password?",
@@ -592,16 +603,17 @@ def _run_wizard(current, inquirer) -> int:
         or ""
     )
 
-    # 9. Connect to tablet and select folders
+    # 9. Connect to the selected source and select folders
     click.echo()
+    source_name = "reMarkable Cloud" if connection_mode == "cloud" else "tablet"
     connect_for_folders = inquirer.confirm(
-        message="Connect to tablet to select folders?",
+        message=f"Discover folders from {source_name}?",
         default=True,
     ).execute()
 
     folders: List[str] = []
     if connect_for_folders:
-        click.echo("  Connecting to tablet to discover folders...")
+        click.echo(f"  Connecting to {source_name} to discover folders...")
 
         folder_choices = _get_folder_choices_live(
             connection_mode,
@@ -625,13 +637,13 @@ def _run_wizard(current, inquirer) -> int:
 
             if folders is None:
                 _print_status_message("Aborted. No changes saved.", success=False)
-            return 0
+                return 0
     else:
-        print_warn("  WRN - Could not connect to tablet. Folder selection skipped.")
+        print_warn("  WRN - Folder selection skipped.")
         folders = current.get("folders", [])
 
     # Save password to keyring (not in config file)
-    password_saved_to_keyring = False
+    password_saved_to_keyring = current.get("password_in_keyring", False)
     if password:
         from src.backup.credential_store import create_credential_store
 
@@ -685,7 +697,10 @@ def _run_wizard(current, inquirer) -> int:
     click.echo(f"  Mode:       {connection_mode.upper()}")
     if connection_mode == "wifi":
         click.echo(f"  Host:       {wifi_host}")
-    click.echo(f"  Password:   {'••••••••' if password else '(not set)'}")
+    if connection_mode == "cloud":
+        click.echo("  Auth:       cloud device token in system keyring")
+    else:
+        click.echo(f"  Password:   {'••••••••' if password_saved_to_keyring else '(not set)'}")
     console.print(Text("  Backup:     ") + _path_link(backup_dir))
     if pdf_dir:
         console.print(Text("  PDFs:       ") + _path_link(pdf_dir))
@@ -808,6 +823,9 @@ def _get_folder_choices_live(
     """
     import logging
 
+    if connection_mode == "cloud":
+        return _get_cloud_folder_choices()
+
     try:
         from src.backup.connection import USB_HOST, ReMarkableConnection
     except ImportError:
@@ -871,6 +889,101 @@ def _get_folder_choices_live(
         logging.debug("Failed to list folders from tablet: %s", exc)
         click.echo(f"  WRN - Error reading folders: {exc}")
         return []
+    finally:
+        conn.disconnect()
+
+
+def _get_cloud_folder_choices() -> List[Dict[str, Any]]:
+    """Discover top-level folders through the read-only cloud adapter."""
+    from src.backup.cloud_connection import ReMarkableCloudConnection
+
+    conn = ReMarkableCloudConnection()
+    try:
+        if not conn.connect():
+            print_warn("  WRN - Could not connect to reMarkable Cloud.")
+            return []
+
+        xochitl = "/home/root/.local/share/remarkable/xochitl"
+        stdout, _, exit_code = conn.execute_command(
+            f"for f in {xochitl}/*.metadata; do "
+            f'[ -f "$f" ] && echo "FILE:$f" && cat "$f"; '
+            f"done"
+        )
+        if exit_code != 0:
+            click.echo("  WRN - Failed to read metadata from reMarkable Cloud.")
+            return []
+
+        folders: List[str] = []
+        current_json = []
+        for line in stdout.split("\n"):
+            if line.startswith("FILE:"):
+                if current_json:
+                    _parse_folder_metadata("\n".join(current_json), folders)
+                current_json = []
+            else:
+                current_json.append(line)
+        if current_json:
+            _parse_folder_metadata("\n".join(current_json), folders)
+
+        if not folders:
+            click.echo("  No top-level folders found in reMarkable Cloud.")
+            return []
+
+        folders.sort()
+        click.echo(f"  Found {len(folders)} folders in reMarkable Cloud.")
+        choices = [{"name": "(Root) - notebooks not in any folder", "value": "(Root)"}]
+        choices += [{"name": folder, "value": folder} for folder in folders]
+        return choices
+    finally:
+        conn.disconnect()
+
+
+def _configure_cloud_auth(inquirer) -> bool:
+    """Guide the user through cloud pairing and verify the saved token."""
+    from src.backup.cloud_connection import ReMarkableCloudConnection
+    from src.utils.console import print_error, print_success
+
+    conn = ReMarkableCloudConnection()
+    try:
+        click.echo()
+        click.secho("  reMarkable Cloud setup", bold=True)
+        click.echo("  Cloud access is unofficial, read-only, and requires Python 3.12+.")
+        click.echo("  Without Connect, files inactive for 50 days may be absent from cloud.")
+        click.echo("  Missing cloud files are never deleted from your local backup.")
+        click.echo()
+
+        if conn.get_saved_password():
+            click.echo("  A cloud device token is already stored in the system keyring.")
+            click.echo("  Verifying it with reMarkable Cloud...")
+            conn.authenticate()
+            print_success("  OK - Cloud authentication verified")
+            return True
+
+        click.echo("  1. Open this page in your browser:")
+        click.secho(
+            "     https://my.remarkable.com/device/desktop/connect",
+            fg="cyan",
+        )
+        click.echo("  2. Sign in to your reMarkable account.")
+        click.echo("  3. Create a code for a new desktop app.")
+        click.echo("  4. Enter the 8-character code below.")
+        click.echo()
+        code = inquirer.text(message="reMarkable pairing code:").execute()
+        if code is None:
+            _print_status_message("Aborted. No changes saved.", success=False)
+            return False
+        code = code.strip()
+        if len(code) != 8:
+            print_error("  ERR - The reMarkable pairing code must be 8 characters.")
+            return False
+
+        click.echo("  Pairing and verifying cloud access...")
+        conn.authenticate(pairing_code=code)
+        print_success("  OK - Cloud authentication verified and token saved to keyring")
+        return True
+    except RuntimeError as exc:
+        print_error(f"  ERR - {exc}")
+        return False
     finally:
         conn.disconnect()
 

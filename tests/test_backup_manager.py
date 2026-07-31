@@ -311,8 +311,30 @@ class TestBackupErrorPaths:
         assert len(updated) == 0
         assert len(pages) == 0
 
-    def test_do_backup_handles_missing_scp_client(self, tmp_path):
-        """_do_backup_files returns False when scp_client is None."""
+    def test_empty_remote_does_not_delete_local_backup(self, tmp_path):
+        """An absent cloud/device file is not interpreted as a deletion."""
+        empty_fixture = tmp_path / "empty_tablet" / "xochitl"
+        empty_fixture.mkdir(parents=True)
+        backup_dir = tmp_path / "backup"
+        local_file = backup_dir / "Notebooks" / "existing.metadata"
+        local_file.parent.mkdir(parents=True)
+        local_file.write_text('{"visibleName": "Keep me"}')
+
+        mock_conn = MockConnection(fixture_dir=tmp_path / "empty_tablet")
+        mock_conn.connect()
+        backup = ReMarkableBackup(
+            backup_dir=backup_dir,
+            connection=mock_conn,
+            config={"folders": []},
+        )
+
+        success, _, _ = backup._do_backup_files()
+
+        assert success is True
+        assert local_file.read_text() == '{"visibleName": "Keep me"}'
+
+    def test_do_backup_uses_connection_get_instead_of_scp_client(self, tmp_path):
+        """Backups use the transport-neutral connection download method."""
         mock_conn = MockConnection()
         mock_conn.connect()
         mock_conn.scp_client = None  # Simulate missing SCP client
@@ -325,8 +347,7 @@ class TestBackupErrorPaths:
 
         success, updated, pages = backup._do_backup_files()
 
-        # Should fail gracefully when SCP client is missing
-        assert success is False
+        assert success is True
 
     def test_do_backup_handles_download_error(self, tmp_path, capsys):
         """_do_backup_files continues after individual file download errors."""

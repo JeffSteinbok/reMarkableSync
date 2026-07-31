@@ -30,7 +30,7 @@ A comprehensive Python toolkit for backing up reMarkable tablet notebooks, conve
 
 ## Features
 
-- **USB & Wi-Fi sync** — connect via cable or wirelessly over your local network
+- **USB, Wi-Fi & cloud sync** — use the tablet directly or the unofficial read-only cloud API
 - **Incremental backup** — only downloads files that have changed (tracked by size, mtime, and MD5)
 - **PDF conversion** — v5 and v6 .rm formats with template backgrounds, folder hierarchy preserved
 - **AI handwriting recognition** — send page images to GitHub Models (GPT-4o), Claude, or Google Gemini
@@ -70,7 +70,7 @@ The wizard walks you through:
 
 | Setting | Default |
 |---------|---------|
-| **Connection mode** | USB or Wi-Fi (wizard can enable Wi-Fi SSH for you) |
+| **Connection mode** | USB, Wi-Fi, or reMarkable Cloud |
 | **SSH password** | Saved to system keyring |
 | **Backup directory** | `<AppData>/remarkablesync/backup` (internal sync data) |
 | **PDF output** | `~/Documents/reMarkableSync/PDF` |
@@ -153,6 +153,7 @@ All commands read defaults from the saved config. CLI flags override config valu
 - `--host HOST` — tablet IP (default: `10.11.99.1`)
 - `--wifi` — connect over Wi-Fi
 - `--wifi-host HOST` — tablet Wi-Fi IP (auto-discovered if omitted)
+- `--cloud` — use the unofficial read-only reMarkable Cloud API
 
 **Backup:**
 - `-p, --password` — SSH password (prompted if not saved)
@@ -194,6 +195,28 @@ The config wizard can enable Wi-Fi SSH on your tablet automatically via USB. If 
 
 > [!TIP]
 > Assign a static DHCP lease to your tablet in your router so the IP doesn't change.
+
+## Cloud Connection
+
+Cloud mode downloads the same raw notebook structure used by device backups and stores its
+device token in the system keyring. It is read-only and never uploads, renames, moves, or
+deletes cloud content. Cloud mode requires Python 3.12 or newer.
+
+To configure it:
+
+1. Run `reMarkableSync config` and select **Cloud**.
+2. Open <https://my.remarkable.com/device/desktop/connect>.
+3. Sign in and create a code for a new desktop app.
+4. Enter the 8-character code in the wizard.
+5. The wizard verifies access and stores the resulting device token in the system keyring.
+6. Optionally wait for the cloud folder list and select which folders to sync.
+
+The pairing code is temporary and is not stored. Future runs reuse the keyring token.
+
+Without a Connect subscription, files inactive for more than 50 days may stop appearing in
+the cloud until opened again on the tablet. A missing cloud item is therefore treated as
+unavailable, **not deleted**: cloud sync only adds or updates files and never removes an
+existing local backup. Built-in system templates are only available through device sync.
 
 ## Generated Markdown Format
 
@@ -253,6 +276,6 @@ reMarkableSync is built on top of these excellent open-source projects:
 
 ## Security
 
-- SSH password and AI tokens are stored in your **system keyring** (never in plain-text config files)
-- All communication is over your local network (USB or LAN) — nothing goes to the internet except AI API calls
+- SSH passwords, cloud device tokens, and AI tokens are stored in your **system keyring**
+- USB and Wi-Fi stay on the local network; cloud mode connects to reMarkable's servers
 - Config file at `<AppData>/remarkablesync/config.json` contains only non-secret settings
