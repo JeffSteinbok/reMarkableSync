@@ -12,6 +12,8 @@
 
 A comprehensive Python toolkit for backing up reMarkable tablet notebooks, converting them to PDF, and transcribing handwriting to Markdown with AI — over USB or Wi-Fi.
 
+> reMarkableSync is not affiliated with, endorsed by, or sponsored by reMarkable AS. reMarkable is a registered trademark of reMarkable AS.
+
 > [!IMPORTANT]
 > Known device support:
 > - **reMarkable 2** — confirmed working and the primary device tested
