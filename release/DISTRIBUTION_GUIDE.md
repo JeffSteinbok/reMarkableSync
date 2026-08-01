@@ -173,7 +173,7 @@ Developer                    GitHub Actions              End User
 - Add missing modules to the list
 
 ### Executable doesn't run
-- Verify Python version used for build (3.7+)
+- Verify Python version used for build (3.11+)
 - Check PyInstaller version (latest recommended)
 - Review build logs for errors
 

@@ -5,6 +5,7 @@ Defines interfaces for connection, credential storage, and tablet configuration
 to enable dependency injection and improve testability.
 """
 
+from pathlib import Path
 from typing import Dict, List, Optional, Protocol, Tuple, runtime_checkable
 
 
@@ -64,6 +65,15 @@ class ConnectionProtocol(Protocol):
 
     def get(self, remote_path: str, local_path: str, recursive: bool = False) -> None:
         """Download file(s) from the tablet."""
+        ...
+
+    def reconcile_missing_files(
+        self,
+        local_root: Path,
+        remote_root: str,
+        remote_files: List[Dict],
+    ) -> List[Path]:
+        """Apply the connection's policy for files missing from the remote source."""
         ...
 
 

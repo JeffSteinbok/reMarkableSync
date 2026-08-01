@@ -6,6 +6,7 @@ including SSH connection management, file metadata handling, and backup orchestr
 """
 
 from .backup_manager import ReMarkableBackup
+from .cloud_connection import ReMarkableCloudConnection
 from .connection import ReMarkableConnection, discover_tablet_host
 from .credential_store import (
     InMemoryCredentialStore,
@@ -24,6 +25,7 @@ from .tablet_filesystem import TabletFilesystem
 
 __all__ = [
     "ReMarkableConnection",
+    "ReMarkableCloudConnection",
     "FileMetadata",
     "ReMarkableBackup",
     "ConnectionProtocol",

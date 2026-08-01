@@ -163,6 +163,16 @@ class MockConnection:
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dst)
 
+    def reconcile_missing_files(
+        self,
+        local_root: Path,
+        remote_root: str,
+        remote_files: List[Dict],
+    ) -> List[Path]:
+        """Mock/device sync does not reconcile deletions."""
+        del local_root, remote_root, remote_files
+        return []
+
     # ------------------------------------------------------------------
     # Helpers for folder listing (used by config command)
     # ------------------------------------------------------------------

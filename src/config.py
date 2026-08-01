@@ -59,6 +59,7 @@ def _default_documents_dir() -> Path:
 # Note: password is stored in keyring only, not in config file
 DEFAULT_CONFIG: Dict[str, Any] = {
     "connection_mode": "usb",
+    "cloud_missing_policy": "keep",
     "wifi_host": "",
     "password_in_keyring": False,  # Flag only - actual password in system keyring
     "folders": [],

@@ -1,14 +1,126 @@
 """Tests for watch_command module utilities."""
 
+import logging
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import MagicMock
 
 from src.commands.watch_command import (
     FileLock,
+    _build_macos_dock_icon,
     _format_interval,
     _interruptible_sleep,
+    _MacStatusWindow,
     _next_run_time,
+    _TrayLogHandler,
+    _WatchTray,
 )
+
+
+def test_macos_status_window_uses_native_appkit(monkeypatch):
+    monkeypatch.setattr("src.commands.watch_command.sys.platform", "darwin")
+    window = MagicMock()
+    monkeypatch.setattr(
+        "src.commands.watch_command._MacStatusWindow",
+        MagicMock(return_value=window),
+    )
+    tray = _WatchTray(mode="sync", enabled=True, interval=300)
+
+    tray.show_status_window()
+
+    assert tray._status_window is window
+    window.show.assert_called_once()
+
+
+def test_macos_icon_uses_template_rendering(monkeypatch):
+    monkeypatch.setattr("src.commands.watch_command.sys.platform", "darwin")
+    image = MagicMock()
+    tray = _WatchTray(mode="sync", enabled=True, interval=300)
+    tray._icon = MagicMock(_icon_image=image)
+
+    tray.apply_platform_icon_style()
+
+    image.setTemplate_.assert_called_once_with(True)
+
+
+def test_macos_icon_removes_logo_background(monkeypatch):
+    monkeypatch.setattr("src.commands.watch_command.sys.platform", "darwin")
+    tray = _WatchTray(mode="sync", enabled=True, interval=300)
+
+    image = tray._build_icon_image()
+
+    assert image.getpixel((5, 32))[3] == 0
+    assert image.getpixel((24, 24))[3] > 0
+
+
+def test_macos_dock_icon_uses_padded_safe_area():
+    logo_path = Path(__file__).parent.parent / "docs" / "logo.png"
+
+    image = _build_macos_dock_icon(logo_path, size=100)
+
+    assert image.size == (100, 100)
+    assert image.getpixel((5, 50))[3] == 0
+    assert image.getpixel((50, 50))[3] > 0
+
+
+def test_tray_log_handler_tracks_backup_file_progress():
+    tray = MagicMock()
+    handler = _TrayLogHandler(tray)
+    record = logging.LogRecord(
+        "root",
+        logging.INFO,
+        "",
+        0,
+        "Backup: page.rm (file 7/20)",
+        (),
+        None,
+    )
+
+    handler.emit(record)
+
+    tray.set_progress.assert_called_once_with(7, 20, "page.rm")
+
+
+def test_tray_log_handler_tracks_overall_pdf_progress():
+    tray = MagicMock()
+    handler = _TrayLogHandler(tray)
+    record = logging.LogRecord(
+        "root",
+        logging.INFO,
+        "",
+        0,
+        "PDF: Project Notes (page 3/12, overall 42/479)",
+        (),
+        None,
+    )
+
+    handler.emit(record)
+
+    tray.set_progress.assert_called_once_with(
+        42,
+        479,
+        "PDF: Project Notes page 3/12",
+    )
+
+
+def test_macos_status_window_hides_progress_when_idle():
+    tray = _WatchTray(mode="sync", enabled=True, interval=300)
+    tray._status = "Idle"
+    tray._progress_current = 7
+    tray._progress_total = 20
+    window = _MacStatusWindow(tray)
+    window._window = MagicMock()
+    window._status_label = MagicMock()
+    window._progress = MagicMock()
+    window._progress_label = MagicMock()
+    window._log_text = MagicMock()
+    window._log_text.string.return_value = ""
+
+    window._update()
+
+    window._progress.setHidden_.assert_called_once_with(True)
+    window._progress_label.setHidden_.assert_called_once_with(True)
+
 
 # ---------------------------------------------------------------------------
 # _format_interval tests

@@ -153,5 +153,6 @@ class TestConfigModule:
             loaded = load_config()
 
         assert loaded["connection_mode"] == "wifi"
+        assert loaded["cloud_missing_policy"] == "keep"
         assert "sync_actions" in loaded  # merged from defaults
         assert loaded["sync_actions"] == ["backup", "pdf", "ocr"]  # default + cascade

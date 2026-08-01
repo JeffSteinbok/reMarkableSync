@@ -48,6 +48,7 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
         password: Optional[str] = None,
         host: str = "10.11.99.1",
         use_wifi: bool = False,
+        use_cloud: bool = False,
         wifi_host: str = "",
         pre_sync_command: str = "",
         post_sync_command: str = "",
@@ -62,6 +63,7 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
             password: SSH password for tablet (prompted if not provided)
             host: Tablet IP/hostname (USB default: 10.11.99.1)
             use_wifi: Connect via Wi-Fi instead of USB
+            use_cloud: Download from reMarkable Cloud instead of the tablet
             wifi_host: Wi-Fi IP/hostname (auto-discovered if empty)
             pre_sync_command: Shell command to run before SSH connects.
             post_sync_command: Shell command to run after SSH disconnects.
@@ -83,6 +85,13 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
         # Use injected connection or create default
         if connection is not None:
             self.connection = connection
+        elif use_cloud:
+            from .cloud_connection import ReMarkableCloudConnection
+
+            self.connection = ReMarkableCloudConnection(
+                tablet_config=tablet_config,
+                missing_policy=self._get_config().get("cloud_missing_policy", "keep"),
+            )
         else:
             self.connection = ReMarkableConnection(
                 password=password,
@@ -218,6 +227,8 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
                 logging.warning("No files found on reMarkable tablet")
                 return True, set(), {}
 
+            all_remote_files = list(remote_files)
+
             # Apply folder filter — only sync files belonging to allowed UUIDs
             if allowed_uuids is not None:
 
@@ -247,6 +258,12 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
                 if self.metadata.should_sync_file(remote_file, local_path):
                     files_to_sync.append((remote_file, local_path))
 
+            self.connection.reconcile_missing_files(
+                self.files_dir,
+                self.remote_xochitl_dir,
+                all_remote_files,
+            )
+
             if not files_to_sync:
                 print("  All files are up to date")
                 logging.info("All files are up to date")
@@ -265,16 +282,14 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
             with create_progress("Downloading") as progress:
                 task = progress.add_task("Downloading", total=len(files_to_sync))
 
-                for remote_file, local_path in files_to_sync:
+                total_files = len(files_to_sync)
+                for file_number, (remote_file, local_path) in enumerate(files_to_sync, start=1):
                     try:
                         # Create local directory if needed
                         local_path.parent.mkdir(parents=True, exist_ok=True)
 
                         # Download file
-                        if self.connection.scp_client is None:
-                            logging.error("SCP client not initialized")
-                            return False, set(), {}
-                        self.connection.scp_client.get(remote_file["path"], str(local_path))
+                        self.connection.get(remote_file["path"], str(local_path))
 
                         # Update metadata
                         self.metadata.update_file_metadata(remote_file, local_path)
@@ -311,6 +326,12 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
                                 updated_pages[notebook_uuid].add(page_id)
 
                         progress.update(task, advance=1, description=local_path.name[:40])
+                        logging.info(
+                            "Backup: %s (file %d/%d)",
+                            local_path.name,
+                            file_number,
+                            total_files,
+                        )
 
                     except (OSError, SCPException) as e:
                         print_error(f"  ERR - Failed to download {remote_file['path']}: {e}")
@@ -367,10 +388,7 @@ class ReMarkableBackup:  # pylint: disable=too-many-instance-attributes
                     try:
                         local_path.parent.mkdir(parents=True, exist_ok=True)
 
-                        if self.connection.scp_client is None:
-                            logging.error("SCP client not initialized")
-                            return False
-                        self.connection.scp_client.get(remote_file["path"], str(local_path))
+                        self.connection.get(remote_file["path"], str(local_path))
 
                         self.metadata.update_file_metadata(remote_file, local_path)
 

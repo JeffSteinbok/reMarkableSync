@@ -12,10 +12,13 @@ import sys
 import threading
 import time
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from ..utils.logging import setup_logging
+
+STATUS_ICON_NAME = "menu bar icon" if sys.platform == "darwin" else "system tray icon"
 
 # Back-off parameters
 _INITIAL_BACKOFF = 60  # seconds
@@ -31,6 +34,32 @@ INTERVAL_CHOICES = [
     ("Every 8 hours", 8 * 60 * 60),
     ("Manual only", 0),
 ]
+
+_MACOS_ICON_CONTENT_FRACTION = 0.805
+
+
+def _build_macos_dock_icon(logo_path: Path, size: int = 512):
+    """Return a padded Dock icon matching Apple's macOS icon safe area."""
+    from PIL import Image, ImageDraw
+
+    master = Image.open(logo_path).convert("RGBA")
+    mask = Image.new("L", master.size, 0)
+    radius = round(master.width * 0.22)
+    ImageDraw.Draw(mask).rounded_rectangle(
+        (0, 0, master.width - 1, master.height - 1),
+        radius=radius,
+        fill=255,
+    )
+    rounded = Image.new("RGBA", master.size, (0, 0, 0, 0))
+    rounded.paste(master, (0, 0), mask)
+
+    content_size = round(size * _MACOS_ICON_CONTENT_FRACTION)
+    artwork = rounded.resize((content_size, content_size), Image.LANCZOS)
+    result = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    offset = (size - content_size) // 2
+    result.paste(artwork, (offset, offset), artwork)
+    return result
+
 
 # Registry key for Windows startup
 _STARTUP_REG_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -52,6 +81,7 @@ class FileLock:
 
     def acquire(self) -> bool:
         try:
+            self._lock_path.parent.mkdir(parents=True, exist_ok=True)
             self._fh = open(self._lock_path, "w", encoding="utf-8")
             if sys.platform == "win32":
                 import msvcrt
@@ -266,7 +296,7 @@ class _WatchTray:
         self._log_lines: list = []
         self._log_lock = threading.Lock()
         self._MAX_LOG_LINES = 50
-        self._status_window: Optional["_StatusWindow"] = None
+        self._status_window: Optional[Any] = None
         self._show_lock = threading.Lock()
         # Progress tracking
         self._progress_current = 0
@@ -288,17 +318,24 @@ class _WatchTray:
         """Load the app logo for tray icon, with colored status dot in corner."""
         from pathlib import Path
 
-        from PIL import Image, ImageDraw
+        from PIL import Image, ImageChops, ImageDraw
 
         # Try to load the logo
         logo_path = Path(__file__).parent.parent.parent / "docs" / "logo.png"
         if logo_path.exists():
             try:
                 image = Image.open(logo_path).convert("RGBA")
+                if sys.platform == "darwin":
+                    red, green, blue, source_alpha = image.split()
+                    brightness = ImageChops.lighter(red, ImageChops.lighter(green, blue))
+                    mark_alpha = brightness.point(lambda value: max(0, min(255, (value - 64) * 4)))
+                    mark_alpha = ImageChops.multiply(mark_alpha, source_alpha)
+                    image = Image.new("RGBA", image.size, (0, 0, 0, 255))
+                    image.putalpha(mark_alpha)
                 image = image.resize((64, 64), Image.LANCZOS)
 
                 # Add a small colored status dot in corner
-                if color:
+                if color and sys.platform != "darwin":
                     draw = ImageDraw.Draw(image)
                     draw.ellipse((42, 42, 62, 62), fill=color, outline="white", width=2)
 
@@ -334,6 +371,8 @@ class _WatchTray:
             self._log_lines.append(text)
             if len(self._log_lines) > self._MAX_LOG_LINES:
                 self._log_lines = self._log_lines[-self._MAX_LOG_LINES :]
+        if self._status_window:
+            self._status_window.update()
 
     def get_log_lines(self) -> list:
         with self._log_lock:
@@ -344,20 +383,24 @@ class _WatchTray:
         self._progress_current = current
         self._progress_total = total
         self._progress_label = label
+        if self._status_window:
+            self._status_window.update()
 
     def clear_progress(self) -> None:
         self._progress_current = 0
         self._progress_total = 0
         self._progress_label = ""
+        if self._status_window:
+            self._status_window.update()
 
     def show_status_window(self) -> None:
         """Show the status window (creates it on first call, shows it after)."""
         if self._status_window is None:
-            win = _StatusWindow(self)
+            win = _MacStatusWindow(self) if sys.platform == "darwin" else _StatusWindow(self)
             self._status_window = win
-            win.start()
-        elif self._status_window.is_alive():
-            self._status_window.show()
+            if sys.platform != "darwin":
+                win.start()
+        self._status_window.show()
 
     def _on_show_status(self, icon, item):
         # Must not block pystray's message handler thread
@@ -534,15 +577,15 @@ class _WatchTray:
 
     # -- Lifecycle --
 
-    def start(self) -> None:
+    def _create_icon(self) -> bool:
         if not self._enabled:
-            return
+            return False
 
         try:
             import pystray
         except Exception as exc:
-            logging.info("System tray disabled (pystray unavailable): %s", exc)
-            return
+            logging.info("Status icon disabled (pystray unavailable): %s", exc)
+            return False
 
         try:
             self._icon = pystray.Icon(
@@ -551,14 +594,47 @@ class _WatchTray:
                 title="reMarkableSync",
                 menu=self._build_menu(),
             )
+            return True
+        except Exception as exc:
+            logging.info("Status icon disabled (unable to initialize): %s", exc)
+            self._icon = None
+            return False
+
+    def start(self) -> None:
+        """Start the status icon on platforms supporting a detached loop."""
+        if not self._create_icon():
+            return
+
+        try:
             if hasattr(self._icon, "run_detached"):
                 self._icon.run_detached()
             else:
                 thread = threading.Thread(target=self._icon.run, daemon=True)
                 thread.start()
         except Exception as exc:
-            logging.info("System tray disabled (unable to initialize): %s", exc)
+            logging.info("Status icon disabled (unable to start): %s", exc)
             self._icon = None
+
+    def run(self, setup: Callable[[Any], None]) -> bool:
+        """Run the status icon loop on the current thread."""
+        if not self._create_icon():
+            return False
+        if sys.platform == "darwin":
+            from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
+
+            NSApplication.sharedApplication().setActivationPolicy_(
+                NSApplicationActivationPolicyAccessory
+            )
+        self._icon.run(setup=setup)
+        return True
+
+    def apply_platform_icon_style(self) -> None:
+        """Apply native platform styling after the icon image is installed."""
+        if sys.platform != "darwin" or not self._icon:
+            return
+        icon_image = getattr(self._icon, "_icon_image", None)
+        if icon_image is not None:
+            icon_image.setTemplate_(True)
 
     def set_status(
         self,
@@ -588,14 +664,17 @@ class _WatchTray:
         if self._icon:
             try:
                 self._icon.icon = self._build_icon_image(color)
+                self.apply_platform_icon_style()
                 self._icon.title = f"reMarkableSync - {status}"
             except Exception:
                 pass
 
+        if self._status_window:
+            self._status_window.update()
         self._rebuild_icon_menu()
 
     def stop(self) -> None:
-        if self._status_window and self._status_window.is_alive():
+        if self._status_window:
             self._status_window.close()
         if self._icon:
             try:
@@ -608,6 +687,200 @@ class _WatchTray:
 # ---------------------------------------------------------------------------
 # Status window (tkinter)
 # ---------------------------------------------------------------------------
+
+
+class _MacStatusWindow:
+    """Native macOS status window sharing the existing AppKit event loop."""
+
+    def __init__(self, tray: _WatchTray):
+        self._tray = tray
+        self._window = None
+        self._status_label = None
+        self._progress = None
+        self._progress_label = None
+        self._log_text = None
+        self._delegate = None
+
+    def _create(self) -> None:
+        if self._window is not None:
+            return
+
+        from AppKit import (
+            NSBackingStoreBuffered,
+            NSFont,
+            NSMakeRect,
+            NSProgressIndicator,
+            NSScrollView,
+            NSTextField,
+            NSTextView,
+            NSWindow,
+            NSWindowStyleMaskClosable,
+            NSWindowStyleMaskResizable,
+            NSWindowStyleMaskTitled,
+        )
+
+        style = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable
+        window = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+            NSMakeRect(0, 0, 576, 320),
+            style,
+            NSBackingStoreBuffered,
+            False,
+        )
+        window.setTitle_("reMarkableSync")
+        window.setReleasedWhenClosed_(False)
+        window.center()
+
+        content = window.contentView()
+
+        status = NSTextField.alloc().initWithFrame_(NSMakeRect(16, 278, 544, 24))
+        status.setBezeled_(False)
+        status.setDrawsBackground_(False)
+        status.setEditable_(False)
+        status.setSelectable_(False)
+        status.setFont_(NSFont.boldSystemFontOfSize_(13))
+        content.addSubview_(status)
+
+        progress = NSProgressIndicator.alloc().initWithFrame_(NSMakeRect(16, 248, 544, 18))
+        progress.setIndeterminate_(False)
+        progress.setMinValue_(0)
+        progress.setMaxValue_(100)
+        progress.setHidden_(True)
+        content.addSubview_(progress)
+
+        progress_label = NSTextField.alloc().initWithFrame_(NSMakeRect(16, 220, 544, 20))
+        progress_label.setBezeled_(False)
+        progress_label.setDrawsBackground_(False)
+        progress_label.setEditable_(False)
+        progress_label.setSelectable_(False)
+        progress_label.setHidden_(True)
+        content.addSubview_(progress_label)
+
+        scroll = NSScrollView.alloc().initWithFrame_(NSMakeRect(16, 16, 544, 196))
+        scroll.setHasVerticalScroller_(True)
+        scroll.setAutohidesScrollers_(True)
+        log_text = NSTextView.alloc().initWithFrame_(NSMakeRect(0, 0, 544, 196))
+        log_text.setEditable_(False)
+        log_text.setSelectable_(True)
+        log_text.setFont_(NSFont.monospacedSystemFontOfSize_weight_(11, 0))
+        scroll.setDocumentView_(log_text)
+        content.addSubview_(scroll)
+
+        delegate = _MacStatusWindowDelegate.alloc().initWithController_(self)
+        window.setDelegate_(delegate)
+
+        self._window = window
+        self._status_label = status
+        self._progress = progress
+        self._progress_label = progress_label
+        self._log_text = log_text
+        self._delegate = delegate
+
+    def show(self) -> None:
+        from PyObjCTools import AppHelper
+
+        AppHelper.callAfter(self._show)
+
+    def _show(self) -> None:
+        from AppKit import (
+            NSApplication,
+            NSApplicationActivationPolicyRegular,
+            NSImage,
+        )
+        from Foundation import NSBundle, NSData
+
+        self._create()
+        self._update()
+        app = NSApplication.sharedApplication()
+        app.setActivationPolicy_(NSApplicationActivationPolicyRegular)
+
+        bundle = NSBundle.mainBundle()
+        if bundle is not None:
+            info = bundle.localizedInfoDictionary() or bundle.infoDictionary()
+            if info is not None:
+                info["CFBundleName"] = "reMarkableSync"
+                info["CFBundleDisplayName"] = "reMarkableSync"
+
+        logo_path = Path(__file__).parent.parent.parent / "docs" / "logo.png"
+        if logo_path.exists():
+            buffer = BytesIO()
+            _build_macos_dock_icon(logo_path).save(buffer, format="PNG")
+            image = NSImage.alloc().initWithData_(NSData(buffer.getvalue()))
+            if image is not None:
+                image.setTemplate_(False)
+                app.setApplicationIconImage_(image)
+
+        app.activateIgnoringOtherApps_(True)
+        self._window.makeKeyAndOrderFront_(None)
+
+    def hide(self) -> None:
+        if self._window is None:
+            return
+        from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
+
+        self._window.orderOut_(None)
+        NSApplication.sharedApplication().setActivationPolicy_(
+            NSApplicationActivationPolicyAccessory
+        )
+
+    def update(self) -> None:
+        if self._window is None:
+            return
+        from PyObjCTools import AppHelper
+
+        AppHelper.callAfter(self._update)
+
+    def _update(self) -> None:
+        if self._window is None:
+            return
+        tray = self._tray
+        parts = [tray._status]
+        if tray._last_sync:
+            result = "✓" if tray._last_sync_ok else "✗"
+            parts.append(f"Last sync: {tray._last_sync} {result}")
+        if tray._next_sync and tray._interval > 0:
+            parts.append(f"Next: {tray._next_sync}")
+        self._status_label.setStringValue_("  |  ".join(parts))
+
+        show_progress = tray._status == "Running" and tray._progress_total > 0
+        self._progress.setHidden_(not show_progress)
+        self._progress_label.setHidden_(not show_progress)
+        if show_progress:
+            percent = (tray._progress_current / tray._progress_total) * 100
+            self._progress.setDoubleValue_(percent)
+            self._progress_label.setStringValue_(
+                f"{tray._progress_label}  " f"({tray._progress_current}/{tray._progress_total})"
+            )
+        else:
+            self._progress.setDoubleValue_(0)
+            self._progress_label.setStringValue_("")
+
+        self._log_text.setString_("\n".join(tray.get_log_lines()))
+        self._log_text.scrollRangeToVisible_((len(self._log_text.string()), 0))
+
+    def close(self) -> None:
+        if self._window is None:
+            return
+        from PyObjCTools import AppHelper
+
+        AppHelper.callAfter(self.hide)
+
+
+if sys.platform == "darwin":
+    import objc
+    from Foundation import NSObject
+
+    class _MacStatusWindowDelegate(NSObject):
+        """Hide the status window instead of destroying it."""
+
+        def initWithController_(self, controller):
+            self = objc.super(_MacStatusWindowDelegate, self).init()
+            if self is not None:
+                self._controller = controller
+            return self
+
+        def windowShouldClose_(self, sender):
+            self._controller.hide()
+            return False
 
 
 class _StatusWindow(threading.Thread):
@@ -670,11 +943,10 @@ class _StatusWindow(threading.Thread):
             maximum=100,
             style="dark.Horizontal.TProgressbar",
         )
-        self._progress_bar.pack(fill=tk.X, padx=10, pady=4)
 
         # Progress label (e.g. "Page 3 of 21")
         self._progress_label = ttk.Label(root, text="", style="TLabel")
-        self._progress_label.pack(fill=tk.X, padx=10, pady=(0, 4))
+        self._progress_visible = False
 
         # Log text area
         self._log_text = tk.Text(
@@ -745,7 +1017,27 @@ class _StatusWindow(threading.Thread):
             self._status_label.configure(text="  |  ".join(parts))
 
             # Update progress bar
-            if tray._progress_total > 0:
+            show_progress = tray._status == "Running" and tray._progress_total > 0
+            if show_progress and not self._progress_visible:
+                self._progress_bar.pack(
+                    fill=tk.X,
+                    padx=10,
+                    pady=4,
+                    before=self._log_text,
+                )
+                self._progress_label.pack(
+                    fill=tk.X,
+                    padx=10,
+                    pady=(0, 4),
+                    before=self._log_text,
+                )
+                self._progress_visible = True
+            elif not show_progress and self._progress_visible:
+                self._progress_bar.pack_forget()
+                self._progress_label.pack_forget()
+                self._progress_visible = False
+
+            if show_progress:
                 pct = (tray._progress_current / tray._progress_total) * 100
                 self._progress_var.set(pct)
                 self._progress_label.configure(
@@ -811,13 +1103,28 @@ class _TrayLogHandler(logging.Handler):
                 return
             self._tray.set_detail(msg)
 
-            # Parse progress from page callbacks: "PDF: Work (page 3/21)" or "PDF: Work (page 3/21) [cached]"
+            # PDF conversion reports global progress while retaining notebook context.
             import re
 
+            m = re.search(
+                r"PDF: (.+?) \(page (\d+)/(\d+), overall (\d+)/(\d+)\)",
+                msg,
+            )
+            if m:
+                label = f"PDF: {m.group(1)} page {m.group(2)}/{m.group(3)}"
+                self._tray.set_progress(int(m.group(4)), int(m.group(5)), label)
+                return
+
+            # Markdown and older PDF records report progress within one notebook.
             m = re.search(r"(PDF|MD): (.+?) \(page (\d+)/(\d+)\)", msg)
             if m:
                 label = f"{m.group(1)}: {m.group(2)}"
                 self._tray.set_progress(int(m.group(3)), int(m.group(4)), label)
+                return
+
+            m = re.search(r"Backup: (.+?) \(file (\d+)/(\d+)\)", msg)
+            if m:
+                self._tray.set_progress(int(m.group(2)), int(m.group(3)), m.group(1))
         except Exception:
             pass
 
@@ -869,63 +1176,19 @@ def _interruptible_sleep(seconds: int, tray: _WatchTray) -> None:
 # ---------------------------------------------------------------------------
 
 
-def run_watch_command(
+def _run_watch_loop(
     interval: int,
     backup_dir: Path,
     run_once: Callable[[], int],
-    log_level: str = "WRN",
-    mode: str = "sync",
-    use_systray: bool = True,
-    output_dir: Optional[Path] = None,
-    get_interval: Optional[Callable[[], int]] = None,
-    on_interval_change: Optional[Callable[[int], None]] = None,
+    mode: str,
+    output_dir: Optional[Path],
+    get_interval: Optional[Callable[[], int]],
+    tray: _WatchTray,
+    process_lock: FileLock,
 ) -> int:
-    """Run *run_once* repeatedly every *interval* seconds.
-
-    Args:
-        interval: Seconds between sync attempts (0 = manual only).
-        backup_dir: Backup directory (used for lock-file placement).
-        run_once: Callable that performs one sync pass and returns an exit
-                  code (0 = success, non-zero = failure).
-        log_level: Logging level string.
-        mode: Human-readable mode label shown in log messages.
-        use_systray: Enable a best-effort system tray status icon.
-        output_dir: Markdown output directory (for "Open Markdown Folder").
-        get_interval: Optional callable returning the interval (seconds) to
-                  use. Called at the start of each cycle so config-file edits
-                  take effect without restarting.
-        on_interval_change: Optional callback invoked with the new interval
-                  (seconds) when it is changed via the tray menu, so the change
-                  can be persisted to config.
-
-    Returns:
-        Exit code (0).  Returns when interrupted via Ctrl-C or tray Quit.
-    """
-    setup_logging(log_level)
-    backup_dir.mkdir(parents=True, exist_ok=True)
-
-    # Prevent multiple watch instances from running simultaneously
-    process_lock_path = backup_dir / ".remarkable_watch_process.lock"
-    process_lock = FileLock(process_lock_path)
-    if not process_lock.acquire():
-        print("Another reMarkableSync watch instance is already running.")
-        print("Please quit the existing instance first (system tray → Quit).")
-        return 1
-
-    tray = _WatchTray(
-        mode=mode,
-        enabled=use_systray,
-        interval=interval,
-        backup_dir=backup_dir,
-        output_dir=output_dir,
-        on_interval_change=on_interval_change,
-    )
-    tray.start()
-
-    # Install log handler that feeds activity into the tray menu
+    """Run sync cycles after the status icon has been initialized."""
     tray_handler = _TrayLogHandler(tray)
     logging.getLogger().addHandler(tray_handler)
-
     lock_path = backup_dir / ".remarkable_watch.lock"
 
     print(f"reMarkableSync Watch ({mode})")
@@ -939,30 +1202,22 @@ def run_watch_command(
 
     consecutive_failures = 0
     current_backoff = 0
-
-    # Short startup delay so the tray icon is visible before first sync
-    _STARTUP_DELAY = 5
-    print(f"  Starting first sync in {_STARTUP_DELAY}s...")
-    _interruptible_sleep(_STARTUP_DELAY, tray)
+    startup_delay = 5
+    print(f"  Starting first sync in {startup_delay}s...")
+    _interruptible_sleep(startup_delay, tray)
 
     try:
-        while True:
-            if tray.quit_event.is_set():
-                break
-
-            # Paused — spin until unpaused or quit
+        while not tray.quit_event.is_set():
             if tray.paused:
                 time.sleep(1)
                 continue
 
-            # Re-read interval from config so edits apply on the next cycle.
             if get_interval is not None:
                 try:
                     tray.set_interval(get_interval())
                 except Exception:
                     pass
 
-            # Manual mode — wait for Sync Now
             current_interval = tray.interval
             if current_interval == 0:
                 tray.set_status("Idle")
@@ -972,7 +1227,6 @@ def run_watch_command(
                     break
                 tray.sync_now_event.clear()
 
-            # Apply back-off after failures
             if current_backoff > 0:
                 tray.set_status("Backoff")
                 logging.warning(
@@ -984,11 +1238,10 @@ def run_watch_command(
                 if tray.quit_event.is_set():
                     break
 
-            # Acquire lock to prevent overlapping runs
             lock = FileLock(lock_path)
             if not lock.acquire():
                 tray.set_status("Idle")
-                logging.warning("Another sync is already running (lock file exists). Skipping.")
+                logging.warning("Another sync is already running. Skipping.")
                 if current_interval > 0:
                     _interruptible_sleep(current_interval, tray)
                 continue
@@ -1034,7 +1287,6 @@ def run_watch_command(
             finally:
                 lock.release()
 
-            # Wait for next cycle (interruptible by Sync Now / Quit)
             if current_interval > 0:
                 next_ts = _next_run_time(current_interval)
                 tray.set_detail("")
@@ -1043,13 +1295,90 @@ def run_watch_command(
                     next_sync=next_ts,
                 )
                 _interruptible_sleep(current_interval, tray)
-
     except KeyboardInterrupt:
         pass
+    finally:
+        print("\n  [STOPPED] Watch mode stopped.")
+        logging.getLogger().removeHandler(tray_handler)
+        tray.set_status("Stopped")
+        tray.stop()
+        process_lock.release()
 
-    print("\n  [STOPPED] Watch mode stopped.")
-    logging.getLogger().removeHandler(tray_handler)
-    tray.set_status("Stopped")
-    tray.stop()
-    process_lock.release()
     return 0
+
+
+def run_watch_command(
+    interval: int,
+    backup_dir: Path,
+    run_once: Callable[[], int],
+    log_level: str = "WRN",
+    mode: str = "sync",
+    use_systray: bool = True,
+    output_dir: Optional[Path] = None,
+    get_interval: Optional[Callable[[], int]] = None,
+    on_interval_change: Optional[Callable[[int], None]] = None,
+) -> int:
+    """Run *run_once* repeatedly every *interval* seconds.
+
+    Args:
+        interval: Seconds between sync attempts (0 = manual only).
+        backup_dir: Backup directory (used for lock-file placement).
+        run_once: Callable that performs one sync pass and returns an exit
+                  code (0 = success, non-zero = failure).
+        log_level: Logging level string.
+        mode: Human-readable mode label shown in log messages.
+        use_systray: Enable a best-effort system tray status icon.
+        output_dir: Markdown output directory (for "Open Markdown Folder").
+        get_interval: Optional callable returning the interval (seconds) to
+                  use. Called at the start of each cycle so config-file edits
+                  take effect without restarting.
+        on_interval_change: Optional callback invoked with the new interval
+                  (seconds) when it is changed via the tray menu, so the change
+                  can be persisted to config.
+
+    Returns:
+        Exit code (0).  Returns when interrupted via Ctrl-C or tray Quit.
+    """
+    setup_logging(log_level)
+    backup_dir.mkdir(parents=True, exist_ok=True)
+
+    # Prevent multiple watch instances from running simultaneously
+    process_lock_path = backup_dir / ".remarkable_watch_process.lock"
+    process_lock = FileLock(process_lock_path)
+    if not process_lock.acquire():
+        print("Another reMarkableSync watch instance is already running.")
+        print(f"Please quit from the {STATUS_ICON_NAME} first.")
+        return 1
+
+    tray = _WatchTray(
+        mode=mode,
+        enabled=use_systray,
+        interval=interval,
+        backup_dir=backup_dir,
+        output_dir=output_dir,
+        on_interval_change=on_interval_change,
+    )
+
+    loop_args = (
+        interval,
+        backup_dir,
+        run_once,
+        mode,
+        output_dir,
+        get_interval,
+        tray,
+        process_lock,
+    )
+    if sys.platform == "darwin" and use_systray:
+        result: list[int] = []
+
+        def run_loop(icon: Any) -> None:
+            icon.visible = True
+            tray.apply_platform_icon_style()
+            result.append(_run_watch_loop(*loop_args))
+
+        if tray.run(run_loop):
+            return result[0] if result else 0
+
+    tray.start()
+    return _run_watch_loop(*loop_args)
