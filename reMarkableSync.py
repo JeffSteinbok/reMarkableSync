@@ -21,8 +21,8 @@ if sys.platform == "win32":
         sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 # Check Python version before importing anything else
-if sys.version_info < (3, 12):
-    print("Error: RemarkableSync requires Python 3.12 or higher.")
+if sys.version_info < (3, 11):
+    print("Error: RemarkableSync requires Python 3.11 or higher.")
     print(
         f"You are using Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
     )

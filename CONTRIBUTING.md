@@ -47,7 +47,7 @@ isort .
 
 ### Type Hints
 
-Use type hints for all function parameters and return values where possible. The project targets Python 3.12+.
+Use type hints for all function parameters and return values where possible. The project targets Python 3.11+.
 
 ### Testing
 

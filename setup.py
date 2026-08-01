@@ -34,7 +34,7 @@ setup(
     py_modules=["reMarkableSync"],
     include_package_data=True,
     install_requires=requirements,
-    python_requires=">=3.12",
+    python_requires=">=3.11",
     entry_points={
         "console_scripts": [
             "reMarkableSync=reMarkableSync:main",
@@ -46,6 +46,7 @@ setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
         "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
         "Programming Language :: Python :: 3.13",
         "Topic :: Utilities",

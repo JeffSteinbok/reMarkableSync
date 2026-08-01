@@ -7,13 +7,13 @@ from unittest.mock import MagicMock
 
 from src.commands.watch_command import (
     FileLock,
-    _WatchTray,
-    _MacStatusWindow,
-    _TrayLogHandler,
     _build_macos_dock_icon,
     _format_interval,
     _interruptible_sleep,
+    _MacStatusWindow,
     _next_run_time,
+    _TrayLogHandler,
+    _WatchTray,
 )
 
 

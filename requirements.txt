@@ -15,7 +15,7 @@ keyring>=24.0.0
 InquirerPy>=0.3.4
 PyMuPDF>=1.23.0
 rmc>=0.3.0
-remarkapy>=0.2.2
+remarkapy>=0.3.0
 
 # OCR and image handling
 pdf2image>=1.16.0

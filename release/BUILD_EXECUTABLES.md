@@ -62,12 +62,12 @@ If you prefer to build locally or need custom modifications, follow these instru
 
 #### For Building on macOS
 - macOS 10.13 or later
-- Python 3.12 or higher installed
+- Python 3.11 or higher installed
 - Xcode Command Line Tools: `xcode-select --install`
 
 #### For Building on Windows
 - Windows 10 or later
-- Python 3.12 or higher installed from [python.org](https://www.python.org/downloads/)
+- Python 3.11 or higher installed from [python.org](https://www.python.org/downloads/)
 - Make sure Python is added to PATH during installation
 
 ### Building Executables

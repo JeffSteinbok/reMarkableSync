@@ -255,7 +255,7 @@ class ReMarkableCloudConnection:
                 items,
             )
 
-        for item, manifest in zip(items, manifests):
+        for item, manifest in zip(items, manifests, strict=True):
             self._items[item.id] = item
             for file_ref in manifest.entries:
                 self._files[f"{xochitl}/{file_ref.id}"] = (item, file_ref)

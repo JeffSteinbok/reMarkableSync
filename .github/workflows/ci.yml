@@ -21,29 +21,29 @@ jobs:
   lint:
     uses: ./.github/workflows/common-lint.yml
 
-  test-windows-312:
+  test-windows-311:
     needs: lint
     uses: ./.github/workflows/common-test.yml
     with:
-      python-version: '3.12'
+      python-version: '3.11'
       os: windows-latest
 
-  test-macos-312:
-    needs: test-windows-312
+  test-macos-311:
+    needs: test-windows-311
     uses: ./.github/workflows/common-test.yml
     with:
-      python-version: '3.12'
+      python-version: '3.11'
       os: macos-latest
 
   test-macos-313:
-    needs: test-windows-312
+    needs: test-windows-311
     uses: ./.github/workflows/common-test.yml
     with:
       python-version: '3.13'
       os: macos-latest
 
   test-windows-313:
-    needs: test-windows-312
+    needs: test-windows-311
     uses: ./.github/workflows/common-test.yml
     with:
       python-version: '3.13'
