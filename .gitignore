@@ -67,6 +67,8 @@ run_sync.bat
 *.app
 *.dmg
 *.pkg
+# Windows installer build output
+RemarkableSync-Setup-*.exe
 
 test_backup
 output.md

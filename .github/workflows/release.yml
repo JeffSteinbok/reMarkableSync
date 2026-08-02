@@ -153,11 +153,24 @@ jobs:
           copy README.md reMarkableSync-Windows\
           powershell Compress-Archive -Path reMarkableSync-Windows -DestinationPath reMarkableSync-Windows.zip
 
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build Windows installer
+        run: |
+          iscc /DAppVersion=${{ needs.bump-version.outputs.new_version }} /DIsDev=0 release\windows-installer\setup.iss
+
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v5
         with:
           name: reMarkableSync-Windows
           path: reMarkableSync-Windows.zip
+
+      - name: Upload Windows installer artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: reMarkableSync-Windows-Installer
+          path: RemarkableSync-Setup-*.exe
 
   build-macos:
     needs: bump-version
@@ -222,6 +235,11 @@ jobs:
         with:
           name: reMarkableSync-Windows
 
+      - name: Download Windows installer artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: reMarkableSync-Windows-Installer
+
       - name: Download macOS artifact
         uses: actions/download-artifact@v5
         with:
@@ -237,6 +255,11 @@ jobs:
 
             ### Installation
 
+            #### Windows (Installer — recommended)
+            Download `RemarkableSync-Setup-${{ needs.bump-version.outputs.new_version }}.exe` below and run it.
+            No Python or administrator rights required.  Installs per-user under
+            `%LocalAppData%\Programs\RemarkableSync`.
+
             #### macOS (Homebrew — recommended)
             ```bash
             brew tap jeffsteinbok/remarkablesync
@@ -248,7 +271,7 @@ jobs:
             pip install --upgrade remarkablesync
             ```
 
-            #### Manual download
+            #### Manual download (portable ZIP)
             Download the appropriate package for your platform below:
             - **Windows**: `reMarkableSync-Windows.zip`
             - **macOS**: `reMarkableSync-macOS.zip`
@@ -270,6 +293,7 @@ jobs:
 
 
           files: |
+            RemarkableSync-Setup-${{ needs.bump-version.outputs.new_version }}.exe
             reMarkableSync-Windows.zip
             reMarkableSync-macOS.zip
           draft: true

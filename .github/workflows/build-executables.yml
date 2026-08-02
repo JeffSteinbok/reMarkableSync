@@ -42,17 +42,39 @@ jobs:
           copy README.md reMarkableSync-Windows\
           powershell Compress-Archive -Path reMarkableSync-Windows -DestinationPath reMarkableSync-Windows.zip
 
+      - name: Get version for installer
+        id: get_version
+        shell: bash
+        run: |
+          VERSION=$(grep -oP '__version__\s*=\s*"\K[0-9]+\.[0-9]+\.[0-9]+' src/__version__.py)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build Windows installer
+        run: |
+          iscc /DAppVersion=${{ steps.get_version.outputs.version }} /DIsDev=1 release\windows-installer\setup.iss
+
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v5
         with:
           name: reMarkableSync-Windows
           path: reMarkableSync-Windows.zip
 
+      - name: Upload Windows installer artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: reMarkableSync-Windows-Installer
+          path: RemarkableSync-Setup-*.exe
+
       - name: Upload to Release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: reMarkableSync-Windows.zip
+          files: |
+            reMarkableSync-Windows.zip
+            RemarkableSync-Setup-*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

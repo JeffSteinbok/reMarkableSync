@@ -110,11 +110,46 @@ If you prefer to build locally or need custom modifications, follow these instru
 
 3. Build the executable:
    ```cmd
-   pyinstaller RemarkableSync.spec
+   pyinstaller --clean release\reMarkableSync.spec
    ```
 
 4. The executable will be created in the `dist\` directory:
-   - `dist\RemarkableSync.exe`
+   - `dist\reMarkableSync\RemarkableSync.exe`
+
+#### Windows Installer Build (Inno Setup)
+
+The Windows installer wraps the PyInstaller one-folder bundle in a conventional
+setup wizard.  Build it after the PyInstaller step above.
+
+**Prerequisites**
+- [Inno Setup 6.1+](https://jrsoftware.org/isdl.php) — or install via Chocolatey:
+  ```cmd
+  choco install innosetup
+  ```
+
+**Build a development installer** (shows an unsigned-build warning to users):
+```cmd
+iscc /DAppVersion=3.0.0 /DIsDev=1 release\windows-installer\setup.iss
+```
+
+**Build a release installer** (warning suppressed; use for code-signed builds):
+```cmd
+iscc /DAppVersion=3.0.0 /DIsDev=0 release\windows-installer\setup.iss
+```
+
+The compiled installer (`RemarkableSync-Setup-<version>.exe`) is placed in
+`release\windows-installer\`.
+
+**Installer features**
+- Per-user installation under `%LocalAppData%\Programs\RemarkableSync` — no
+  administrator rights required.
+- Start Menu shortcut; optional desktop shortcut.
+- Registered uninstaller (visible in *Apps & Features*).
+- In-place upgrades — user data in `%APPDATA%\remarkablesync` (config, logs,
+  credentials, backups) is **never** deleted by the installer or uninstaller.
+- If the user had previously enabled *Run at startup* inside the app, the
+  installer refreshes the Windows registry startup command to point at the
+  new executable path.
 
 ## Testing the Executables
 
