@@ -35,7 +35,7 @@ import click
 
 from src.__version__ import __version__
 from src.backup.connection import USB_HOST
-from src.utils.logging import LogLevel
+from src.utils.logging import LogLevel, LOG_FILE_NAME
 
 # ---------------------------------------------------------------------------
 # Shared connection options (reused across commands)
@@ -98,7 +98,7 @@ def print_header():
 
     from src.config import get_config_dir
 
-    log_file = get_config_dir() / "reMarkablesync.log"
+    log_file = get_config_dir() / LOG_FILE_NAME
     console = Console(highlight=False)
 
     # Create header panel - using brand blue color
