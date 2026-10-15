@@ -16,7 +16,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from ..utils.logging import setup_logging
+from ..utils.logging import LOG_FILE_NAME, setup_logging
 
 STATUS_ICON_NAME = "menu bar icon" if sys.platform == "darwin" else "system tray icon"
 
@@ -431,7 +431,7 @@ class _WatchTray:
 
     def _on_open_log(self, icon, item):
         if self._backup_dir:
-            log_file = self._backup_dir.parent / "remarkablesync.log"
+            log_file = self._backup_dir.parent / LOG_FILE_NAME
             if log_file.exists():
                 self._open_file(log_file)
 

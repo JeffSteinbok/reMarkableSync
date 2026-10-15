@@ -17,6 +17,9 @@ MAX_LOG_BACKUP_COUNT = 3  # Keep 3 rotated files (total 4 including current)
 # Custom level higher than CRITICAL — effectively silences the console
 _NONE_LEVEL = logging.CRITICAL + 10
 
+# Log file destination
+LOG_FILE_NAME = "remarkablesync.log"
+
 
 def _write_session_header(file_handler: RotatingFileHandler) -> None:
     """Write a session header to the log file for easy identification."""
@@ -155,7 +158,7 @@ def setup_logging(
     # --- File handler with rotation (always DEBUG) ---
     if log_dir:
         log_dir.mkdir(parents=True, exist_ok=True)
-        log_file = log_dir / "remarkablesync.log"
+        log_file = log_dir / LOG_FILE_NAME
         file_handler = RotatingFileHandler(
             log_file,
             mode="a",
