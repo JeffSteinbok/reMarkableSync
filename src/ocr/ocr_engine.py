@@ -26,6 +26,11 @@ class OCREngine:
     CHUNK_TARGET_HEIGHT = 800
     CHUNK_OVERLAP_PCT = 0.15
 
+    # Hard ceiling enforced by vision APIs (e.g. Anthropic Claude rejects any
+    # image with a side above this with a 400 error) regardless of DPI or
+    # chunking settings.
+    MAX_IMAGE_DIMENSION = 8000
+
     def __init__(
         self,
         ai_provider: Optional[BaseAIProvider] = None,
@@ -122,6 +127,35 @@ class OCREngine:
             logging.error("pdf2image failed for %s: %s", pdf_path.name, exc)
             return []
 
+    def _clamp_to_max_dimension(self, img, label: str):
+        """Downscale *img* if either side exceeds ``MAX_IMAGE_DIMENSION``.
+
+        Vision APIs reject images above this size with an opaque 400 error,
+        so we proactively shrink oversized images (preserving aspect ratio)
+        and log the measured dimensions to make the cause obvious.
+
+        Returns the original image unchanged, or a resized copy.
+        """
+        from PIL import Image
+
+        w, h = img.size
+        longest = max(w, h)
+        if longest <= self.MAX_IMAGE_DIMENSION:
+            return img
+
+        scale = self.MAX_IMAGE_DIMENSION / longest
+        new_w, new_h = max(1, int(w * scale)), max(1, int(h * scale))
+        logging.warning(
+            "%s is %dx%d, exceeding the %dpx vision API limit – resizing to %dx%d.",
+            label,
+            w,
+            h,
+            self.MAX_IMAGE_DIMENSION,
+            new_w,
+            new_h,
+        )
+        return img.resize((new_w, new_h), Image.LANCZOS)
+
     def _chunk_image(self, img_path: Path, output_dir: Path) -> List[Path]:
         """Split a tall image into overlapping vertical chunks for better OCR.
 
@@ -139,6 +173,9 @@ class OCREngine:
                 num_chunks = max(1, h // self.CHUNK_TARGET_HEIGHT)
 
                 if num_chunks <= 1:
+                    clamped = self._clamp_to_max_dimension(img, img_path.stem)
+                    if clamped is not img:
+                        clamped.save(img_path)
                     return [img_path]
 
                 logging.debug(
@@ -161,12 +198,11 @@ class OCREngine:
                     )
 
                     chunk = img.crop((0, y_start, w, y_end))
+                    chunk = self._clamp_to_max_dimension(chunk, f"{img_path.stem} chunk {i+1:02d}")
                     chunk_path = output_dir / f"{img_path.stem}_chunk{i+1:02d}.png"
                     chunk.save(chunk_path)
                     chunk_paths.append(chunk_path)
-                    logging.debug(
-                        "  Chunk %d: %s (%dx%d)", i + 1, chunk_path.name, w, y_end - y_start
-                    )
+                    logging.debug("  Chunk %d: %s (%dx%d)", i + 1, chunk_path.name, *chunk.size)
 
                 return chunk_paths
         except Exception as exc:  # noqa: BLE001

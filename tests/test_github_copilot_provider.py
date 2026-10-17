@@ -3,6 +3,10 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+import requests
+
+from src.ai.base_provider import AIProviderError
 from src.ai.github_copilot_provider import (
     DEFAULT_COPILOT_ENDPOINT,
     GitHubCopilotProvider,
@@ -339,3 +343,31 @@ class TestTranscribeHandwriting:
 
         mock_responses.assert_called_once()
         assert result == "transcribed text"
+
+
+class TestTranscribeAnthropicErrorHandling:
+    """Tests that Copilot API error details are surfaced to the caller."""
+
+    @patch("src.ai.github_copilot_provider.requests.post")
+    def test_includes_response_body_in_error(self, mock_post):
+        """A 400 response body (e.g. oversized image) is included in the raised error."""
+        mock_resp = MagicMock()
+        mock_resp.text = (
+            '{"error": {"message": "image exceeds max allowed size: 8000x9215 pixels"}}'
+        )
+        mock_resp.raise_for_status.side_effect = requests.HTTPError(
+            "400 Client Error: Bad Request for url: https://api.test.com/v1/messages",
+            response=mock_resp,
+        )
+        mock_post.return_value = mock_resp
+
+        provider = GitHubCopilotProvider(api_key="test", model="claude-sonnet-4.5")
+        provider._copilot_token = "token"
+        provider._copilot_endpoint = "https://api.test.com"
+
+        with pytest.raises(AIProviderError) as exc_info:
+            provider._transcribe_anthropic(
+                [Path("tests/fixtures/sample_handwriting.png")], "prompt"
+            )
+
+        assert "exceeds max allowed size" in str(exc_info.value)
