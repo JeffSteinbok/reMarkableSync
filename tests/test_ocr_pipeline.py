@@ -104,3 +104,52 @@ class TestOCREngine:
         assert raw == ""
         assert processed == ""
         assert mock_provider.transcribe_call_count == 0
+
+    def test_clamp_to_max_dimension_leaves_small_image_unchanged(self):
+        """Images within the API limit are returned unmodified."""
+        from PIL import Image
+
+        from src.ocr.ocr_engine import OCREngine
+
+        engine = OCREngine(ai_provider=MockAIProvider(), use_ai=True)
+        img = Image.new("RGB", (500, 300))
+
+        result = engine._clamp_to_max_dimension(img, "test")
+
+        assert result is img
+        assert result.size == (500, 300)
+
+    def test_clamp_to_max_dimension_resizes_oversized_image(self):
+        """Images exceeding MAX_IMAGE_DIMENSION are downscaled, preserving aspect ratio."""
+        from PIL import Image
+
+        from src.ocr.ocr_engine import OCREngine
+
+        engine = OCREngine(ai_provider=MockAIProvider(), use_ai=True)
+        img = Image.new("RGB", (2000, 9000))
+
+        result = engine._clamp_to_max_dimension(img, "test page")
+
+        longest_side = max(result.size)
+        assert OCREngine.MAX_IMAGE_DIMENSION - 1 <= longest_side <= OCREngine.MAX_IMAGE_DIMENSION
+        # Aspect ratio preserved (within rounding)
+        assert abs(result.size[0] / result.size[1] - 2000 / 9000) < 0.01
+
+    def test_chunk_image_clamps_oversized_unsplit_image(self):
+        """A wide single-chunk image over the limit is resized when saved."""
+        from PIL import Image
+
+        from src.ocr.ocr_engine import OCREngine
+
+        engine = OCREngine(ai_provider=MockAIProvider(), use_ai=True)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            img_path = tmp_dir / "wide.png"
+            Image.new("RGB", (9000, 400)).save(img_path)
+
+            chunks = engine._chunk_image(img_path, tmp_dir)
+
+            assert chunks == [img_path]
+            with Image.open(img_path) as saved:
+                assert max(saved.size) <= OCREngine.MAX_IMAGE_DIMENSION

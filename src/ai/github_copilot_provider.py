@@ -251,6 +251,16 @@ class GitHubCopilotProvider(BaseAIProvider):
                         pass
             return full_text
 
+        except requests.HTTPError as exc:
+            detail = exc.response.text.strip() if exc.response is not None else ""
+            message = f"GitHub Copilot transcription failed: {exc}"
+            if detail:
+                message += f" - {detail}"
+            logging.error(message)
+            retry = parse_retry_after(exc)
+            if retry is not None:
+                raise AIRateLimitError(message, retry_after=retry) from exc
+            raise AIProviderError(message) from exc
         except Exception as exc:
             logging.error("Copilot Anthropic transcription error: %s", exc)
             retry = parse_retry_after(exc)
@@ -310,6 +320,16 @@ class GitHubCopilotProvider(BaseAIProvider):
                         pass
             return full_text
 
+        except requests.HTTPError as exc:
+            detail = exc.response.text.strip() if exc.response is not None else ""
+            message = f"GitHub Copilot transcription failed: {exc}"
+            if detail:
+                message += f" - {detail}"
+            logging.error(message)
+            retry = parse_retry_after(exc)
+            if retry is not None:
+                raise AIRateLimitError(message, retry_after=retry) from exc
+            raise AIProviderError(message) from exc
         except Exception as exc:
             logging.error("Copilot OpenAI Responses transcription error: %s", exc)
             retry = parse_retry_after(exc)
