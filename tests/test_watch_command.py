@@ -1,9 +1,12 @@
 """Tests for watch_command module utilities."""
 
 import logging
+import sys
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock
+
+import pytest
 
 from src.commands.watch_command import (
     FileLock,
@@ -12,9 +15,184 @@ from src.commands.watch_command import (
     _interruptible_sleep,
     _MacStatusWindow,
     _next_run_time,
+    _StatusWindow,
     _TrayLogHandler,
     _WatchTray,
+    run_watch_command,
 )
+
+pytestmark = pytest.mark.usefixtures("runtime_dir")
+
+
+def test_watch_keeps_both_locks_and_log_outside_backup(monkeypatch, tmp_path, runtime_dir):
+    from src.config import get_lock_dir, get_log_dir
+
+    backup = tmp_path / "OneDrive" / "backup"
+    tray = _WatchTray("sync", False, 1, backup_dir=backup)
+    monkeypatch.setattr("src.commands.watch_command._WatchTray", lambda **kwargs: tray)
+    monkeypatch.setattr("src.commands.watch_command._interruptible_sleep", lambda *args: None)
+    lock_dir = get_lock_dir(backup)
+
+    def run_once():
+        assert (lock_dir / ".remarkable_watch.lock").exists()
+        assert (lock_dir / ".remarkable_watch_process.lock").exists()
+        assert not list(backup.glob("*.lock"))
+        contender = FileLock(lock_dir / ".remarkable_watch_process.lock")
+        assert not contender.acquire()
+        tray.quit_event.set()
+        return 0
+
+    assert run_watch_command(1, backup, run_once, log_level="NONE", use_systray=False) == 0
+    log_file = get_log_dir() / "remarkablesync.log"
+    assert log_file.is_relative_to(runtime_dir)
+    assert log_file.exists()
+    assert not list(backup.parent.glob("*.log"))
+    assert not list(lock_dir.glob("*.lock"))
+    tray._open_file = MagicMock()
+    tray._on_open_log(None, None)
+    tray._open_file.assert_called_once_with(log_file)
+
+
+@pytest.mark.parametrize("configured", [True, False])
+def test_tray_pdf_folder_menu_and_action(monkeypatch, tmp_path, configured):
+    pystray = MagicMock()
+    monkeypatch.setitem(sys.modules, "pystray", pystray)
+    monkeypatch.setattr("src.commands.watch_command._is_startup_enabled", lambda: False)
+    pdf_dir = tmp_path / "pdf" if configured else None
+    tray = _WatchTray("sync", True, 300, pdf_dir=pdf_dir)
+    tray._open_folder = MagicMock()
+
+    tray._build_menu()
+
+    labels = [call.args[0] for call in pystray.MenuItem.call_args_list]
+    assert ("Open PDF Folder" in labels) == configured
+    if configured:
+        tray._on_open_pdf(None, None)
+        tray._open_folder.assert_called_once_with(pdf_dir)
+
+
+@pytest.mark.parametrize("failure", ["import", "tk", "widgets"])
+def test_status_window_startup_failure_is_logged_notified_and_retryable(
+    monkeypatch, caplog, failure
+):
+    monkeypatch.setattr("src.commands.watch_command.sys.platform", "win32")
+    tray = _WatchTray(mode="sync", enabled=True, interval=300)
+    tray._icon = MagicMock()
+    window = _StatusWindow(tray)
+    tray._status_window = window
+    root = MagicMock()
+    tk = MagicMock()
+    tk.Tk.return_value = root
+    if failure == "import":
+        monkeypatch.setitem(sys.modules, "tkinter", None)
+    else:
+        monkeypatch.setitem(sys.modules, "tkinter", tk)
+        if failure == "tk":
+            tk.Tk.side_effect = RuntimeError("Tcl/Tk runtime missing")
+        else:
+            root.geometry.side_effect = RuntimeError("Widget initialization failed")
+
+    with caplog.at_level(logging.ERROR):
+        window.run()
+
+    assert tray._status_window is None
+    assert window._root is None
+    assert "Could not open Show Status" in caplog.text
+    assert "Traceback" in caplog.text
+    message, title = tray._icon.notify.call_args.args
+    assert "Sync is still running" in message
+    assert "remarkablesync.log" in message
+    assert "Tcl/Tk" in message
+    assert "Status window error" in title
+    assert not tray.quit_event.is_set()
+    if failure == "widgets":
+        root.destroy.assert_called_once()
+
+    retry = MagicMock()
+    monkeypatch.setattr("src.commands.watch_command._StatusWindow", MagicMock(return_value=retry))
+    tray.show_status_window()
+    assert tray._status_window is retry
+    retry.start.assert_called_once()
+    retry.show.assert_called_once()
+
+
+def test_status_window_requests_never_call_tk_from_the_sync_thread():
+    tray = _WatchTray(mode="sync", enabled=True, interval=300)
+    window = _StatusWindow(tray)
+    root = MagicMock()
+    window._root = root
+    tray._status_window = window
+
+    window.show()
+    tray.set_detail("Sync is running")
+    tray.set_status("Running")
+    tray.set_progress(1, 4, "Notebook")
+    tray.clear_progress()
+    tray.stop()
+
+    assert window._show_requested.is_set()
+    assert window._close_requested.is_set()
+    assert tray.get_log_lines() == ["Sync is running"]
+    assert root.mock_calls == []
+
+
+def test_status_window_show_before_startup_and_reopen_use_same_instance(monkeypatch):
+    monkeypatch.setattr("src.commands.watch_command.sys.platform", "win32")
+    monkeypatch.setattr(_StatusWindow, "start", MagicMock())
+    tray = _WatchTray(mode="sync", enabled=True, interval=300)
+
+    tray.show_status_window()
+    window = tray._status_window
+    assert window._show_requested.is_set()
+    assert window._root is None
+    window._show_requested.clear()
+    tray.show_status_window()
+
+    assert tray._status_window is window
+    assert window._show_requested.is_set()
+    window.start.assert_called_once()
+
+
+def test_status_window_poll_handles_close_on_tk_thread():
+    tray = _WatchTray(mode="sync", enabled=True, interval=300)
+    window = _StatusWindow(tray)
+    window._root = MagicMock()
+
+    window.close()
+    window._poll()
+
+    window._root.quit.assert_called_once()
+    window._root.after.assert_not_called()
+
+
+def test_watch_logs_status_startup_errors_before_first_sync(monkeypatch, tmp_path, runtime_dir):
+    root_logger = logging.getLogger()
+    monkeypatch.setattr(root_logger, "handlers", root_logger.handlers.copy())
+    monkeypatch.setattr(root_logger, "level", root_logger.level)
+    monkeypatch.setitem(sys.modules, "tkinter", None)
+    monkeypatch.setattr(_WatchTray, "start", MagicMock())
+
+    def fail_window_before_sync(*args):
+        tray, process_lock = args[-2:]
+        tray._icon = MagicMock()
+        try:
+            window = _StatusWindow(tray)
+            tray._status_window = window
+            window.run()
+            return 0
+        finally:
+            process_lock.release()
+
+    monkeypatch.setattr("src.commands.watch_command._run_watch_loop", fail_window_before_sync)
+    try:
+        assert run_watch_command(300, tmp_path / "backup", MagicMock(), log_level="NONE") == 0
+        log = (runtime_dir / "logs" / "remarkablesync.log").read_text(encoding="utf-8")
+        assert "Could not open Show Status" in log
+        assert "ModuleNotFoundError" in log
+        assert "Traceback" in log
+    finally:
+        for handler in root_logger.handlers:
+            handler.close()
 
 
 def test_macos_status_window_uses_native_appkit(monkeypatch):

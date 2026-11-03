@@ -101,10 +101,10 @@ def run_config_command(log_level: str = "NONE") -> int:
     Args:
         log_level: Log verbosity level (DBG, INF, WRN, ERR, NONE).
     """
-    from src.config import get_config_dir
+    from src.config import get_log_dir
     from src.utils.logging import setup_logging
 
-    log_dir = get_config_dir()
+    log_dir = get_log_dir()
     setup_logging(log_level, log_dir=log_dir)
 
     try:

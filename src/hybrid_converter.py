@@ -561,6 +561,7 @@ def convert_notebook(
         "v3_detected": len(notebook.get("v3_files", [])),
         "total_files": 0,
         "output_files": [],
+        "failed_pages": [],
     }
 
     # Collect all PDF pages to merge (in order)
@@ -651,6 +652,8 @@ def convert_notebook(
             # Convert the .rm file to a content PDF
             content_pdf = page_cache_dir / f"{page_id}_content.pdf"
             if not convert_fn(rm_file, content_pdf):
+                results["failed_pages"].append(rm_file)
+                logging.error("Failed to convert %s page %s", notebook["name"], rm_file.name)
                 return None, False
 
             # Apply template if available
@@ -740,6 +743,14 @@ def convert_notebook(
         # Store ordered page PDFs in results for downstream consumers
         results["page_pdfs"] = list(page_pdfs)
 
+        if results["failed_pages"]:
+            logging.error(
+                "Not merging incomplete notebook %s: %d page(s) failed",
+                notebook["name"],
+                len(results["failed_pages"]),
+            )
+            return results
+
         # Create merged PDF if we have any pages
         if page_pdfs:
             final_pdf = output_notebook_dir / f"{safe_name}.pdf"
@@ -765,17 +776,13 @@ def convert_notebook(
         )
 
         # Unsupported versions note
-        if results["v4_detected"] or results["v3_detected"]:
+        if results["v3_detected"]:
             unsupported_info = output_notebook_dir / f"{safe_name}_unsupported.txt"
             try:
                 with open(unsupported_info, "w", encoding="utf-8") as f:
                     f.write(f"Notebook: {notebook['name']}\n")
                     f.write(f"UUID: {notebook['uuid']}\n\n")
                     f.write("Detected unsupported .rm versions:\n")
-                    if results["v4_detected"]:
-                        f.write(
-                            f"  - v4 pages: {results['v4_detected']} (no converter implemented yet)\n"
-                        )
                     if results["v3_detected"]:
                         f.write(f"  - v3 pages: {results['v3_detected']} (legacy format)\n")
                     f.write(

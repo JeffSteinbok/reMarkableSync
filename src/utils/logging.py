@@ -86,7 +86,7 @@ _LEVEL_MAP = {
 
 def is_interactive() -> bool:
     """Return True if running in an interactive terminal."""
-    if sys.stdout.isatty() or sys.stderr.isatty():
+    if any(stream is not None and stream.isatty() for stream in (sys.stdout, sys.stderr)):
         return True
     if os.environ.get("WT_SESSION"):  # Windows Terminal
         return True
@@ -132,9 +132,10 @@ def setup_logging(
     root = logging.getLogger()
     # Preserve tray log handlers across re-initialization
     preserved = [h for h in root.handlers if h.__class__.__name__ == "_TrayLogHandler"]
-    root.handlers.clear()
-    for h in preserved:
-        root.addHandler(h)
+    for handler in root.handlers[:]:
+        if handler not in preserved:
+            root.removeHandler(handler)
+            handler.close()
     # Root logger at DEBUG so the file handler sees everything
     root.setLevel(logging.DEBUG)
 
