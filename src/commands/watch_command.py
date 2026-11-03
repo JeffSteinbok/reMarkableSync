@@ -16,6 +16,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable, Optional
 
+from ..config import get_lock_dir, get_log_dir
 from ..utils.logging import LOG_FILE_NAME, setup_logging
 
 STATUS_ICON_NAME = "menu bar icon" if sys.platform == "darwin" else "system tray icon"
@@ -413,12 +414,9 @@ class _WatchTray:
             self._show_lock.release()
 
     def _report_status_window_error(self) -> None:
-        from ..config import get_config_dir
-
-        log_dir = self._backup_dir.parent if self._backup_dir else get_config_dir()
         message = (
             "Could not open Show Status. Sync is still running. "
-            f"Log: {log_dir / LOG_FILE_NAME}. "
+            f"Log: {get_log_dir() / LOG_FILE_NAME}. "
             "Restore Tcl/Tk (re-extract the release or repair Python), then retry."
         )
         logging.exception(message)
@@ -460,10 +458,9 @@ class _WatchTray:
         self._open_folder(self._pdf_dir)
 
     def _on_open_log(self, icon, item):
-        if self._backup_dir:
-            log_file = self._backup_dir.parent / LOG_FILE_NAME
-            if log_file.exists():
-                self._open_file(log_file)
+        log_file = get_log_dir() / LOG_FILE_NAME
+        if log_file.exists():
+            self._open_file(log_file)
 
     def _on_quit(self, icon, item):
         self.quit_event.set()
@@ -1249,7 +1246,7 @@ def _run_watch_loop(
     """Run sync cycles after the status icon has been initialized."""
     tray_handler = _TrayLogHandler(tray)
     logging.getLogger().addHandler(tray_handler)
-    lock_path = backup_dir / ".remarkable_watch.lock"
+    lock_path = get_lock_dir(backup_dir) / ".remarkable_watch.lock"
 
     print(f"reMarkableSync Watch ({mode})")
     print("=" * 70)
@@ -1383,7 +1380,7 @@ def run_watch_command(
 
     Args:
         interval: Seconds between sync attempts (0 = manual only).
-        backup_dir: Backup directory (used for lock-file placement).
+        backup_dir: Backup directory (identifies the machine-local locks).
         run_once: Callable that performs one sync pass and returns an exit
                   code (0 = success, non-zero = failure).
         log_level: Logging level string.
@@ -1400,11 +1397,11 @@ def run_watch_command(
     Returns:
         Exit code (0).  Returns when interrupted via Ctrl-C or tray Quit.
     """
-    setup_logging(log_level, log_dir=backup_dir.parent)
+    setup_logging(log_level, log_dir=get_log_dir())
     backup_dir.mkdir(parents=True, exist_ok=True)
 
     # Prevent multiple watch instances from running simultaneously
-    process_lock_path = backup_dir / ".remarkable_watch_process.lock"
+    process_lock_path = get_lock_dir(backup_dir) / ".remarkable_watch_process.lock"
     process_lock = FileLock(process_lock_path)
     if not process_lock.acquire():
         print("Another reMarkableSync watch instance is already running.")

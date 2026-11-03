@@ -10,6 +10,10 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+pytestmark = pytest.mark.usefixtures("runtime_dir")
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

@@ -43,9 +43,9 @@ def run_sync_command(
     """
     import time as _time
 
-    from ..config import load_config
+    from ..config import get_log_dir, load_config
 
-    log_dir = backup_dir.parent
+    log_dir = get_log_dir()
     setup_logging(log_level, log_dir=log_dir)
     _start_time = _time.monotonic()
 

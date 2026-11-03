@@ -96,9 +96,9 @@ def print_header():
     from rich.panel import Panel
     from rich.text import Text
 
-    from src.config import get_config_dir
+    from src.config import get_log_dir
 
-    log_file = get_config_dir() / LOG_FILE_NAME
+    log_file = get_log_dir() / LOG_FILE_NAME
     console = Console(highlight=False)
 
     # Create header panel - using brand blue color
@@ -639,11 +639,11 @@ def test_md(
     import tempfile
 
     from src.ai import get_provider as get_ai_provider
-    from src.config import get_config_dir, load_config
+    from src.config import get_log_dir, load_config
     from src.ocr.ocr_engine import OCREngine
     from src.utils.logging import setup_logging
 
-    setup_logging(log_level, log_dir=get_config_dir())
+    setup_logging(log_level, log_dir=get_log_dir())
 
     # Check config version compatibility
     if not check_config_compatibility():
@@ -843,7 +843,7 @@ def watch(
     Use --foreground to keep it attached.
     """
     from src.commands.watch_command import INTERVAL_CHOICES, run_watch_command
-    from src.config import load_config, save_config
+    from src.config import get_lock_dir, load_config, save_config
 
     cfg = load_config()
 
@@ -890,7 +890,7 @@ def watch(
         backup_dir = Path(cfg.get("backup_dir", "./remarkable_backup"))
         from src.commands.watch_command import FileLock
 
-        process_lock_path = backup_dir / ".remarkable_watch_process.lock"
+        process_lock_path = get_lock_dir(backup_dir) / ".remarkable_watch_process.lock"
         test_lock = FileLock(process_lock_path)
         if not test_lock.acquire():
             click.echo("reMarkableSync watch is already running.")

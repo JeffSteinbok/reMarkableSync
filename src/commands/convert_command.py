@@ -50,9 +50,9 @@ def run_convert_command(
     Returns:
         Exit code (0 for success, 1 for failure)
     """
-    from ..config import get_config_dir
+    from ..config import get_log_dir
 
-    log_dir = get_config_dir()
+    log_dir = get_log_dir()
     setup_logging(log_level, log_dir=log_dir)
     backup_dir = _resolve_backup_dir(backup_dir)
 

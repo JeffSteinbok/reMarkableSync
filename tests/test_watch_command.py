@@ -21,6 +21,37 @@ from src.commands.watch_command import (
     run_watch_command,
 )
 
+pytestmark = pytest.mark.usefixtures("runtime_dir")
+
+
+def test_watch_keeps_both_locks_and_log_outside_backup(monkeypatch, tmp_path, runtime_dir):
+    from src.config import get_lock_dir, get_log_dir
+
+    backup = tmp_path / "OneDrive" / "backup"
+    tray = _WatchTray("sync", False, 1, backup_dir=backup)
+    monkeypatch.setattr("src.commands.watch_command._WatchTray", lambda **kwargs: tray)
+    monkeypatch.setattr("src.commands.watch_command._interruptible_sleep", lambda *args: None)
+    lock_dir = get_lock_dir(backup)
+
+    def run_once():
+        assert (lock_dir / ".remarkable_watch.lock").exists()
+        assert (lock_dir / ".remarkable_watch_process.lock").exists()
+        assert not list(backup.glob("*.lock"))
+        contender = FileLock(lock_dir / ".remarkable_watch_process.lock")
+        assert not contender.acquire()
+        tray.quit_event.set()
+        return 0
+
+    assert run_watch_command(1, backup, run_once, log_level="NONE", use_systray=False) == 0
+    log_file = get_log_dir() / "remarkablesync.log"
+    assert log_file.is_relative_to(runtime_dir)
+    assert log_file.exists()
+    assert not list(backup.parent.glob("*.log"))
+    assert not list(lock_dir.glob("*.lock"))
+    tray._open_file = MagicMock()
+    tray._on_open_log(None, None)
+    tray._open_file.assert_called_once_with(log_file)
+
 
 @pytest.mark.parametrize("configured", [True, False])
 def test_tray_pdf_folder_menu_and_action(monkeypatch, tmp_path, configured):
@@ -134,7 +165,7 @@ def test_status_window_poll_handles_close_on_tk_thread():
     window._root.after.assert_not_called()
 
 
-def test_watch_logs_status_startup_errors_before_first_sync(monkeypatch, tmp_path):
+def test_watch_logs_status_startup_errors_before_first_sync(monkeypatch, tmp_path, runtime_dir):
     root_logger = logging.getLogger()
     monkeypatch.setattr(root_logger, "handlers", root_logger.handlers.copy())
     monkeypatch.setattr(root_logger, "level", root_logger.level)
@@ -155,7 +186,7 @@ def test_watch_logs_status_startup_errors_before_first_sync(monkeypatch, tmp_pat
     monkeypatch.setattr("src.commands.watch_command._run_watch_loop", fail_window_before_sync)
     try:
         assert run_watch_command(300, tmp_path / "backup", MagicMock(), log_level="NONE") == 0
-        log = (tmp_path / "remarkablesync.log").read_text(encoding="utf-8")
+        log = (runtime_dir / "logs" / "remarkablesync.log").read_text(encoding="utf-8")
         assert "Could not open Show Status" in log
         assert "ModuleNotFoundError" in log
         assert "Traceback" in log

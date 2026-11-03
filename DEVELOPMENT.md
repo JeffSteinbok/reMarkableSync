@@ -58,8 +58,14 @@ RemarkableSync/
 ├── Notebooks/              # Raw notebook files and metadata
 ├── Templates/              # Template files from device
 ├── PagePDFs/               # Cached per-page PDFs
-├── sync_metadata.json      # Sync state
-└── remarkablesync.log      # Log file
+└── sync_metadata.json      # Sync state
+
+# Machine-local runtime (%LOCALAPPDATA%\remarkablesync on Windows)
+<runtime_dir>/
+├── locks/
+│   └── [backup path hash]/ # Process and sync locks, never cloud-synced
+└── logs/
+    └── remarkablesync.log  # Current log and rotated backups
 
 # PDF output (Documents by default)
 <pdf_dir>/

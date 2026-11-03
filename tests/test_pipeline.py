@@ -6,6 +6,38 @@ patch at the source module level rather than at pipeline module level.
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+pytestmark = pytest.mark.usefixtures("runtime_dir")
+
+
+def test_background_watch_checks_the_machine_local_process_lock(monkeypatch, tmp_path):
+    from click.testing import CliRunner
+
+    import reMarkableSync as entry
+    from src.commands.watch_command import FileLock
+    from src.config import get_lock_dir
+
+    backup = tmp_path / "OneDrive" / "backup"
+    monkeypatch.setattr(entry, "print_header", lambda: None)
+    monkeypatch.setattr(
+        "src.config.load_config",
+        lambda: {"backup_dir": str(backup), "watch_interval": 30},
+    )
+    detach = MagicMock()
+    monkeypatch.setattr(entry, "_detach_watch", detach)
+    lock = FileLock(get_lock_dir(backup) / ".remarkable_watch_process.lock")
+    assert lock.acquire()
+    try:
+        result = CliRunner().invoke(entry.cli, ["watch"])
+    finally:
+        lock.release()
+
+    assert result.exit_code == 0, result.output
+    assert "already running" in result.output
+    detach.assert_not_called()
+    assert not backup.exists()
+
 
 def test_watch_retries_failed_export_and_passes_pdf_folder(monkeypatch, tmp_path):
     from click.testing import CliRunner

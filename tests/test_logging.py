@@ -31,6 +31,22 @@ class TestSetupLogging:
         setup_logging("WRN", log_dir=tmp_path)
         # Should not raise
 
+    def test_reconfiguration_closes_previous_log_file(self, tmp_path):
+        setup_logging("NONE", log_dir=tmp_path / "old")
+        old_handler = next(
+            handler
+            for handler in logging.getLogger().handlers
+            if isinstance(handler, logging.FileHandler)
+        )
+
+        setup_logging("NONE", log_dir=tmp_path / "new")
+
+        assert old_handler.stream is None
+        logging.error("New log destination")
+        assert "New log destination" in (tmp_path / "new" / "remarkablesync.log").read_text(
+            encoding="utf-8"
+        )
+
     def test_pythonw_without_console_streams_still_logs(self, monkeypatch, tmp_path):
         for name in ("WT_SESSION", "TERM_PROGRAM", "ANSICON"):
             monkeypatch.delenv(name, raising=False)

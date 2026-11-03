@@ -18,6 +18,13 @@ sys.path.insert(0, str(project_root))
 
 
 @pytest.fixture
+def runtime_dir(monkeypatch, tmp_path) -> Path:
+    directory = tmp_path / "runtime"
+    monkeypatch.setattr("src.config.get_runtime_dir", lambda: directory)
+    return directory
+
+
+@pytest.fixture
 def temp_dir() -> Generator[Path, None, None]:
     """Create a temporary directory for test outputs.
 
