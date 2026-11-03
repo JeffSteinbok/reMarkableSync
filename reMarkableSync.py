@@ -35,7 +35,7 @@ import click
 
 from src.__version__ import __version__
 from src.backup.connection import USB_HOST
-from src.utils.logging import LogLevel, LOG_FILE_NAME
+from src.utils.logging import LOG_FILE_NAME, LogLevel
 
 # ---------------------------------------------------------------------------
 # Shared connection options (reused across commands)
@@ -1041,6 +1041,68 @@ def _detach_watch():
 # ---------------------------------------------------------------------------
 
 
+@cli.command("status-ui-smoke-test", hidden=True)
+def status_ui_smoke_test():
+    """Exercise the packaged status UI without tablet access or configuration."""
+    from src.commands.watch_command import _StatusWindow, _WatchTray
+
+    errors = []
+
+    class SmokeWindow(_StatusWindow):
+        stage = 0
+
+        def _poll(self):
+            super()._poll()
+            if self._close_requested.is_set():
+                return
+            try:
+                root = self._root
+                root.update_idletasks()
+                if self.stage == 0:
+                    assert root.state() == "normal", "Status window is not visible"
+                    assert self._icon_photo.width() > 0, "Window icon did not load"
+                    assert self._progress_var.get() == 25, "Progress did not update"
+                    assert "Smoke test" in self._log_text.get("1.0", "end")
+                    if getattr(sys, "frozen", False):
+                        bundle = Path(sys._MEIPASS)
+                        assert Path(root.tk.eval("info library")).is_relative_to(bundle)
+                        assert Path(root.tk.eval("set tk_library")).is_relative_to(bundle)
+                        assert (bundle / "docs" / "logo.png").is_file()
+                    self._hide()
+                    assert root.state() == "withdrawn", "Window did not hide"
+                    self._tray.show_status_window()
+                elif self.stage == 1:
+                    assert root.state() == "normal", "Window did not reopen"
+                    self._tray.set_status("Idle")
+                    self._tray.clear_progress()
+                    self._tray.set_detail("Sync continues after closing the window")
+                else:
+                    assert not self._progress_visible, "Idle progress remained visible"
+                    assert "Sync continues" in self._log_text.get("1.0", "end")
+                    self._tray.stop()
+                self.stage += 1
+            except Exception as exc:
+                errors.append(repr(exc))
+                self.close()
+
+    tray = _WatchTray(mode="sync", enabled=False, interval=300)
+    for _ in range(2):
+        tray.set_status("Running")
+        tray.set_progress(1, 4, "Smoke test")
+        tray.set_detail("Smoke test")
+        window = SmokeWindow(tray)
+        tray._status_window = window
+        window.show()
+        window.start()
+        window.join(timeout=15)
+        if window.is_alive():
+            window.close()
+            raise click.ClickException("Status UI smoke test timed out")
+        if errors or window.stage != 3 or tray._status_window is not None:
+            raise click.ClickException(f"Status UI smoke test failed: {errors}")
+    click.echo("Status UI smoke test passed (Tcl/Tk, icon, progress, logs, hide/reopen, restart)")
+
+
 def main():
     """Entry point for the application.
 
@@ -1051,7 +1113,17 @@ def main():
     Config-based defaults (backup_dir, output_dir, connection, etc.) are
     injected as CLI args so the subcommand sees them.
     """
-    known_commands = {"backup", "pdf", "sync", "md", "config", "watch", "check-update", "test-md"}
+    known_commands = {
+        "backup",
+        "pdf",
+        "sync",
+        "md",
+        "config",
+        "watch",
+        "check-update",
+        "test-md",
+        "status-ui-smoke-test",
+    }
     has_command = any(arg in known_commands for arg in sys.argv[1:])
 
     if not has_command and "--version" not in sys.argv and "--help" not in sys.argv:

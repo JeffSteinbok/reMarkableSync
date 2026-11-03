@@ -371,8 +371,8 @@ class _WatchTray:
             self._log_lines.append(text)
             if len(self._log_lines) > self._MAX_LOG_LINES:
                 self._log_lines = self._log_lines[-self._MAX_LOG_LINES :]
-        if self._status_window:
-            self._status_window.update()
+        if window := self._status_window:
+            window.update()
 
     def get_log_lines(self) -> list:
         with self._log_lock:
@@ -383,33 +383,58 @@ class _WatchTray:
         self._progress_current = current
         self._progress_total = total
         self._progress_label = label
-        if self._status_window:
-            self._status_window.update()
+        if window := self._status_window:
+            window.update()
 
     def clear_progress(self) -> None:
         self._progress_current = 0
         self._progress_total = 0
         self._progress_label = ""
-        if self._status_window:
-            self._status_window.update()
+        if window := self._status_window:
+            window.update()
 
     def show_status_window(self) -> None:
         """Show the status window (creates it on first call, shows it after)."""
-        if self._status_window is None:
-            win = _MacStatusWindow(self) if sys.platform == "darwin" else _StatusWindow(self)
-            self._status_window = win
-            if sys.platform != "darwin":
-                win.start()
-        self._status_window.show()
-
-    def _on_show_status(self, icon, item):
-        # Must not block pystray's message handler thread
         if not self._show_lock.acquire(blocking=False):
             return
         try:
-            self.show_status_window()
+            if self._status_window is None:
+                win = _MacStatusWindow(self) if sys.platform == "darwin" else _StatusWindow(self)
+                self._status_window = win
+                if sys.platform != "darwin":
+                    win.start()
+            self._status_window.show()
+        except Exception:
+            self._status_window = None
+            self._report_status_window_error()
         finally:
             self._show_lock.release()
+
+    def _report_status_window_error(self) -> None:
+        from ..config import get_config_dir
+
+        log_dir = self._backup_dir.parent if self._backup_dir else get_config_dir()
+        message = (
+            "Could not open Show Status. Sync is still running. "
+            f"Log: {log_dir / LOG_FILE_NAME}. "
+            "Restore Tcl/Tk (re-extract the release or repair Python), then retry."
+        )
+        logging.exception(message)
+        if self._icon:
+            try:
+                self._icon.notify(message, "reMarkableSync - Status window error")
+                return
+            except Exception:
+                logging.exception("Could not display the status-window error notification")
+        if sys.platform == "win32":
+            import ctypes
+
+            ctypes.windll.user32.MessageBoxW(
+                None, message, "reMarkableSync - Status window error", 0x10
+            )
+
+    def _on_show_status(self, icon, item):
+        self.show_status_window()
 
     # -- Menu callbacks --
 
@@ -669,13 +694,13 @@ class _WatchTray:
             except Exception:
                 pass
 
-        if self._status_window:
-            self._status_window.update()
+        if window := self._status_window:
+            window.update()
         self._rebuild_icon_menu()
 
     def stop(self) -> None:
-        if self._status_window:
-            self._status_window.close()
+        if window := self._status_window:
+            window.close()
         if self._icon:
             try:
                 self._icon.stop()
@@ -890,8 +915,36 @@ class _StatusWindow(threading.Thread):
         super().__init__(daemon=True)
         self._tray = tray
         self._root = None
+        self._show_requested = threading.Event()
+        self._close_requested = threading.Event()
 
     def run(self) -> None:
+        try:
+            self._run_window()
+        except Exception:
+            self._tray._report_status_window_error()
+        finally:
+            if self._root is not None:
+                try:
+                    self._root.destroy()
+                except Exception:
+                    logging.exception("Could not destroy the status window")
+                self._root = None
+            # Release Tk objects on their owning thread, including after failed startup.
+            self.__dict__.pop("_icon_photo", None)
+            for name in (
+                "_status_label",
+                "_progress_var",
+                "_progress_bar",
+                "_progress_label",
+                "_log_text",
+            ):
+                self.__dict__.pop(name, None)
+            with self._tray._show_lock:
+                if self._tray._status_window is self:
+                    self._tray._status_window = None
+
+    def _run_window(self) -> None:
         import tkinter as tk
         from tkinter import ttk
 
@@ -903,7 +956,8 @@ class _StatusWindow(threading.Thread):
         root.configure(bg="#1e1e1e")
 
         # Hide from taskbar — make it a tool window
-        root.attributes("-toolwindow", True)
+        if sys.platform == "win32":
+            root.attributes("-toolwindow", True)
 
         # Position near bottom-right of screen
         sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
@@ -911,15 +965,12 @@ class _StatusWindow(threading.Thread):
         y = sh - 400
         root.geometry(f"+{x}+{y}")
 
-        # Set window icon to match tray icon
-        try:
-            icon_img = self._tray._build_icon_image("#4A90E2")
-            from PIL import ImageTk
+        # Set window icon to match tray icon.
+        from PIL import ImageTk
 
-            self._icon_photo = ImageTk.PhotoImage(icon_img)
-            root.iconphoto(True, self._icon_photo)
-        except Exception:
-            pass
+        icon_img = self._tray._build_icon_image("#4A90E2")
+        self._icon_photo = ImageTk.PhotoImage(icon_img, master=root)
+        root.iconphoto(True, self._icon_photo)
 
         # Dark theme style
         style = ttk.Style(root)
@@ -979,11 +1030,10 @@ class _StatusWindow(threading.Thread):
 
     def show(self) -> None:
         """Show the window (called from any thread)."""
-        if self._root:
-            try:
-                self._root.after(0, self._do_show)
-            except Exception:
-                pass
+        self._show_requested.set()
+
+    def update(self) -> None:
+        """Tray state is read by the Tk thread on its next poll."""
 
     def _do_show(self) -> None:
         """Show the window (must run on tkinter thread)."""
@@ -1001,6 +1051,13 @@ class _StatusWindow(threading.Thread):
         """Poll tray state and update the window every 500ms."""
         if not self._root:
             return
+
+        if self._close_requested.is_set():
+            self._root.quit()
+            return
+        if self._show_requested.is_set():
+            self._show_requested.clear()
+            self._do_show()
 
         try:
             import tkinter as tk
@@ -1066,18 +1123,14 @@ class _StatusWindow(threading.Thread):
                     self._log_text.see(tk.END)
 
         except Exception:
-            pass
+            logging.exception("Could not refresh the status window")
 
         if self._root:
             self._root.after(500, self._poll)
 
     def close(self) -> None:
         """Destroy the window permanently (called on app quit)."""
-        try:
-            if self._root:
-                self._root.after(0, self._root.destroy)
-        except Exception:
-            pass
+        self._close_requested.set()
 
 
 # ---------------------------------------------------------------------------
@@ -1339,7 +1392,7 @@ def run_watch_command(
     Returns:
         Exit code (0).  Returns when interrupted via Ctrl-C or tray Quit.
     """
-    setup_logging(log_level)
+    setup_logging(log_level, log_dir=backup_dir.parent)
     backup_dir.mkdir(parents=True, exist_ok=True)
 
     # Prevent multiple watch instances from running simultaneously

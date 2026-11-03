@@ -42,6 +42,22 @@ jobs:
           copy README.md reMarkableSync-Windows\
           powershell Compress-Archive -Path reMarkableSync-Windows -DestinationPath reMarkableSync-Windows.zip
 
+      - name: Smoke test extracted Windows status UI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $smokeDir = Join-Path $env:RUNNER_TEMP 'remarkablesync-status-smoke'
+          Expand-Archive -Path reMarkableSync-Windows.zip -DestinationPath $smokeDir
+          $exe = Join-Path $smokeDir 'reMarkableSync-Windows\reMarkableSync\RemarkableSync.exe'
+          # Do not let a build-machine Python/Tcl installation mask missing bundle files.
+          'PYTHONHOME', 'PYTHONPATH', 'TCL_LIBRARY', 'TK_LIBRARY' | ForEach-Object {
+            Remove-Item "Env:$_" -ErrorAction SilentlyContinue
+          }
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+          Set-Location $smokeDir
+          & $exe status-ui-smoke-test
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged status UI smoke test failed' }
+
       - name: Get version for installer
         id: get_version
         shell: bash

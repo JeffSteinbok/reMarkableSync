@@ -1,9 +1,12 @@
 """Tests for watch_command module utilities."""
 
 import logging
+import sys
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock
+
+import pytest
 
 from src.commands.watch_command import (
     FileLock,
@@ -12,9 +15,135 @@ from src.commands.watch_command import (
     _interruptible_sleep,
     _MacStatusWindow,
     _next_run_time,
+    _StatusWindow,
     _TrayLogHandler,
     _WatchTray,
+    run_watch_command,
 )
+
+
+@pytest.mark.parametrize("failure", ["import", "tk", "widgets"])
+def test_status_window_startup_failure_is_logged_notified_and_retryable(
+    monkeypatch, caplog, failure
+):
+    monkeypatch.setattr("src.commands.watch_command.sys.platform", "win32")
+    tray = _WatchTray(mode="sync", enabled=True, interval=300)
+    tray._icon = MagicMock()
+    window = _StatusWindow(tray)
+    tray._status_window = window
+    root = MagicMock()
+    tk = MagicMock()
+    tk.Tk.return_value = root
+    if failure == "import":
+        monkeypatch.setitem(sys.modules, "tkinter", None)
+    else:
+        monkeypatch.setitem(sys.modules, "tkinter", tk)
+        if failure == "tk":
+            tk.Tk.side_effect = RuntimeError("Tcl/Tk runtime missing")
+        else:
+            root.geometry.side_effect = RuntimeError("Widget initialization failed")
+
+    with caplog.at_level(logging.ERROR):
+        window.run()
+
+    assert tray._status_window is None
+    assert window._root is None
+    assert "Could not open Show Status" in caplog.text
+    assert "Traceback" in caplog.text
+    message, title = tray._icon.notify.call_args.args
+    assert "Sync is still running" in message
+    assert "remarkablesync.log" in message
+    assert "Tcl/Tk" in message
+    assert "Status window error" in title
+    assert not tray.quit_event.is_set()
+    if failure == "widgets":
+        root.destroy.assert_called_once()
+
+    retry = MagicMock()
+    monkeypatch.setattr("src.commands.watch_command._StatusWindow", MagicMock(return_value=retry))
+    tray.show_status_window()
+    assert tray._status_window is retry
+    retry.start.assert_called_once()
+    retry.show.assert_called_once()
+
+
+def test_status_window_requests_never_call_tk_from_the_sync_thread():
+    tray = _WatchTray(mode="sync", enabled=True, interval=300)
+    window = _StatusWindow(tray)
+    root = MagicMock()
+    window._root = root
+    tray._status_window = window
+
+    window.show()
+    tray.set_detail("Sync is running")
+    tray.set_status("Running")
+    tray.set_progress(1, 4, "Notebook")
+    tray.clear_progress()
+    tray.stop()
+
+    assert window._show_requested.is_set()
+    assert window._close_requested.is_set()
+    assert tray.get_log_lines() == ["Sync is running"]
+    assert root.mock_calls == []
+
+
+def test_status_window_show_before_startup_and_reopen_use_same_instance(monkeypatch):
+    monkeypatch.setattr("src.commands.watch_command.sys.platform", "win32")
+    monkeypatch.setattr(_StatusWindow, "start", MagicMock())
+    tray = _WatchTray(mode="sync", enabled=True, interval=300)
+
+    tray.show_status_window()
+    window = tray._status_window
+    assert window._show_requested.is_set()
+    assert window._root is None
+    window._show_requested.clear()
+    tray.show_status_window()
+
+    assert tray._status_window is window
+    assert window._show_requested.is_set()
+    window.start.assert_called_once()
+
+
+def test_status_window_poll_handles_close_on_tk_thread():
+    tray = _WatchTray(mode="sync", enabled=True, interval=300)
+    window = _StatusWindow(tray)
+    window._root = MagicMock()
+
+    window.close()
+    window._poll()
+
+    window._root.quit.assert_called_once()
+    window._root.after.assert_not_called()
+
+
+def test_watch_logs_status_startup_errors_before_first_sync(monkeypatch, tmp_path):
+    root_logger = logging.getLogger()
+    monkeypatch.setattr(root_logger, "handlers", root_logger.handlers.copy())
+    monkeypatch.setattr(root_logger, "level", root_logger.level)
+    monkeypatch.setitem(sys.modules, "tkinter", None)
+    monkeypatch.setattr(_WatchTray, "start", MagicMock())
+
+    def fail_window_before_sync(*args):
+        tray, process_lock = args[-2:]
+        tray._icon = MagicMock()
+        try:
+            window = _StatusWindow(tray)
+            tray._status_window = window
+            window.run()
+            return 0
+        finally:
+            process_lock.release()
+
+    monkeypatch.setattr("src.commands.watch_command._run_watch_loop", fail_window_before_sync)
+    try:
+        assert run_watch_command(300, tmp_path / "backup", MagicMock(), log_level="NONE") == 0
+        log = (tmp_path / "remarkablesync.log").read_text(encoding="utf-8")
+        assert "Could not open Show Status" in log
+        assert "ModuleNotFoundError" in log
+        assert "Traceback" in log
+    finally:
+        for handler in root_logger.handlers:
+            handler.close()
 
 
 def test_macos_status_window_uses_native_appkit(monkeypatch):
