@@ -7,6 +7,42 @@ patch at the source module level rather than at pipeline module level.
 from unittest.mock import MagicMock, patch
 
 
+def test_watch_retries_failed_export_and_passes_pdf_folder(monkeypatch, tmp_path):
+    from click.testing import CliRunner
+
+    import reMarkableSync as entry
+
+    config = {
+        "backup_dir": str(tmp_path / "backup"),
+        "output_dir": str(tmp_path / "out"),
+        "pdf_dir": str(tmp_path / "pdf"),
+        "watch_interval": 30,
+        "sync_actions": ["backup", "pdf", "ocr"],
+        "ai_provider": "github",
+    }
+    monkeypatch.setattr(entry, "print_header", lambda: None)
+    monkeypatch.setattr("src.config.load_config", lambda: config)
+    monkeypatch.setattr("src.keyring_store.get_secret", lambda key: "")
+    pipeline = MagicMock(side_effect=[1, 0, 0])
+    monkeypatch.setattr("src.commands.pipeline.run_pipeline", pipeline)
+
+    def watch(**kwargs):
+        assert kwargs["pdf_dir"] == tmp_path / "pdf"
+        assert [kwargs["run_once"]() for _ in range(3)] == [1, 0, 0]
+        return 0
+
+    monkeypatch.setattr("src.commands.watch_command.run_watch_command", watch)
+    result = CliRunner().invoke(entry.cli, ["watch", "--foreground"])
+
+    assert result.exit_code == 0, result.output
+    assert [call.kwargs["force_export"] for call in pipeline.call_args_list] == [False, True, False]
+    assert [call.kwargs["force_convert"] for call in pipeline.call_args_list] == [
+        False,
+        True,
+        False,
+    ]
+
+
 class TestRunPipeline:
     """Test pipeline orchestration logic with all external calls mocked."""
 
@@ -28,6 +64,27 @@ class TestRunPipeline:
         defaults["backup_dir"].mkdir(parents=True, exist_ok=True)
         defaults["output_dir"].mkdir(parents=True, exist_ok=True)
         return run_pipeline(**defaults)
+
+    def test_conversion_failure_stops_before_ai_and_markdown(self, tmp_path, capsys):
+        with (
+            patch("src.config.load_config", return_value={"pdf_dir": str(tmp_path / "pdf")}),
+            patch("src.commands.pipeline.run_conversion", return_value=(False, {}, [])),
+            patch("src.ai.get_provider") as provider,
+            patch("src.pdf_md_converter.MarkdownExporter") as exporter,
+        ):
+            assert self._run(tmp_path, skip_convert=False) == 1
+        provider.assert_not_called()
+        exporter.assert_not_called()
+        assert "PDF conversion failed" in capsys.readouterr().out
+
+    def test_unavailable_requested_ai_provider_is_an_error(self, tmp_path):
+        provider = MagicMock()
+        provider.is_available.return_value = False
+        with (
+            patch("src.config.load_config", return_value={"pdf_dir": str(tmp_path / "pdf")}),
+            patch("src.ai.get_provider", return_value=provider),
+        ):
+            assert self._run(tmp_path, use_ai_ocr=True, ai_provider="github") == 1
 
     @patch("src.config.load_config")
     @patch("src.hybrid_converter.find_notebooks", return_value=[])
@@ -99,6 +156,7 @@ class TestRunPipeline:
 
         mock_exporter = MagicMock()
         mock_exporter.export_all.return_value = (1, 0, [])
+        mock_exporter.failed_pages = 0
         mock_exporter_cls.return_value = mock_exporter
 
         result = self._run(tmp_path, force_export=True)
@@ -129,6 +187,7 @@ class TestRunPipeline:
 
         mock_exporter = MagicMock()
         mock_exporter.export_all.return_value = (1, 0, [])
+        mock_exporter.failed_pages = 0
         mock_exporter_cls.return_value = mock_exporter
 
         result = self._run(tmp_path, force_export=True)
@@ -160,6 +219,7 @@ class TestRunPipeline:
 
         mock_exporter = MagicMock()
         mock_exporter.export_all.return_value = (1, 0, [])
+        mock_exporter.failed_pages = 0
         mock_exporter_cls.return_value = mock_exporter
 
         result = self._run(tmp_path, notebook_filter="Target", force_export=True)

@@ -79,14 +79,14 @@ class BaseConverter(ABC):
             from reportlab.graphics import renderPDF  # pylint: disable=import-outside-toplevel
             from svglib.svglib import svg2rlg  # pylint: disable=import-outside-toplevel
         except ImportError:
-            self.logger.debug("svglib/reportlab not available for SVG to PDF conversion")
+            self.logger.exception("svglib/reportlab not available for SVG to PDF conversion")
             return False
 
         try:
             # Convert SVG to reportlab drawing
             drawing = svg2rlg(str(svg_file))
             if drawing is None:
-                self.logger.debug("Failed to parse SVG file: %s", svg_file.name)
+                self.logger.error("Failed to parse SVG file: %s", svg_file.name)
                 return False
 
             # Log drawing dimensions for debugging
@@ -122,11 +122,11 @@ class BaseConverter(ABC):
                 self.logger.debug("SVG to PDF conversion successful: %s", pdf_file.name)
                 return True
 
-            self.logger.debug("PDF creation failed or file too small: %s", pdf_file.name)
+            self.logger.error("PDF creation failed or file too small: %s", pdf_file.name)
             return False
 
-        except Exception as e:  # noqa: BLE001
-            self.logger.debug("SVG to PDF conversion error for %s: %s", svg_file.name, e)
+        except Exception:
+            self.logger.exception("SVG to PDF conversion failed for %s", svg_file.name)
             return False
 
     def copy_existing_pdf(self, source_pdf: Path, target_pdf: Path) -> bool:

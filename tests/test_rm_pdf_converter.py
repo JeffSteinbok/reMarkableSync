@@ -69,6 +69,22 @@ def _patch_progress(monkeypatch=None):
     return patch(_PATCH_PROGRESS, return_value=_fake_progress())
 
 
+def test_one_failed_notebook_does_not_make_partial_conversion_successful(tmp_path):
+    notebooks = [_make_notebook(uuid="ok"), _make_notebook(uuid="failed")]
+    results = [
+        {"output_files": [Path("ok.pdf")], "page_pdfs": [Path("page.pdf")]},
+        {"output_files": [], "page_pdfs": [], "failed_pages": [Path("failed.rm")]},
+    ]
+    with (
+        patch(_PATCH_FIND, return_value=notebooks),
+        patch(_PATCH_ORG, return_value={"documents_to_convert": notebooks}),
+        patch(_PATCH_CONVERT, side_effect=results),
+        _patch_progress(),
+    ):
+        success, _, _ = run_conversion(_build_backup(tmp_path), tmp_path / "pdf")
+    assert success is False
+
+
 # ---------------------------------------------------------------------------
 # Missing / empty backup
 # ---------------------------------------------------------------------------

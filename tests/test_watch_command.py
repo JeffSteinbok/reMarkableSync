@@ -22,6 +22,24 @@ from src.commands.watch_command import (
 )
 
 
+@pytest.mark.parametrize("configured", [True, False])
+def test_tray_pdf_folder_menu_and_action(monkeypatch, tmp_path, configured):
+    pystray = MagicMock()
+    monkeypatch.setitem(sys.modules, "pystray", pystray)
+    monkeypatch.setattr("src.commands.watch_command._is_startup_enabled", lambda: False)
+    pdf_dir = tmp_path / "pdf" if configured else None
+    tray = _WatchTray("sync", True, 300, pdf_dir=pdf_dir)
+    tray._open_folder = MagicMock()
+
+    tray._build_menu()
+
+    labels = [call.args[0] for call in pystray.MenuItem.call_args_list]
+    assert ("Open PDF Folder" in labels) == configured
+    if configured:
+        tray._on_open_pdf(None, None)
+        tray._open_folder.assert_called_once_with(pdf_dir)
+
+
 @pytest.mark.parametrize("failure", ["import", "tk", "widgets"])
 def test_status_window_startup_failure_is_logged_notified_and_retryable(
     monkeypatch, caplog, failure

@@ -275,11 +275,13 @@ class _WatchTray:
         backup_dir: Optional[Path] = None,
         output_dir: Optional[Path] = None,
         on_interval_change: Optional[Callable[[int], None]] = None,
+        pdf_dir: Optional[Path] = None,
     ):
         self._mode = mode
         self._enabled = enabled
         self._backup_dir = backup_dir
         self._output_dir = output_dir
+        self._pdf_dir = pdf_dir
         self._on_interval_change = on_interval_change
         self._icon = None
         self._status = "Idle"
@@ -454,6 +456,9 @@ class _WatchTray:
     def _on_open_output(self, icon, item):
         self._open_folder(self._output_dir)
 
+    def _on_open_pdf(self, icon, item):
+        self._open_folder(self._pdf_dir)
+
     def _on_open_log(self, icon, item):
         if self._backup_dir:
             log_file = self._backup_dir.parent / LOG_FILE_NAME
@@ -572,11 +577,13 @@ class _WatchTray:
 
         if self._backup_dir:
             items.append(pystray.MenuItem("Open Backup Folder", self._on_open_backup))
+        if self._pdf_dir:
+            items.append(pystray.MenuItem("Open PDF Folder", self._on_open_pdf))
         if self._output_dir:
             items.append(pystray.MenuItem("Open Markdown Folder", self._on_open_output))
         if self._backup_dir:
             items.append(pystray.MenuItem("Open Log File", self._on_open_log))
-        if self._backup_dir or self._output_dir:
+        if self._backup_dir or self._pdf_dir or self._output_dir:
             items.append(pystray.Menu.SEPARATOR)
 
         items.append(
@@ -1370,6 +1377,7 @@ def run_watch_command(
     output_dir: Optional[Path] = None,
     get_interval: Optional[Callable[[], int]] = None,
     on_interval_change: Optional[Callable[[int], None]] = None,
+    pdf_dir: Optional[Path] = None,
 ) -> int:
     """Run *run_once* repeatedly every *interval* seconds.
 
@@ -1410,6 +1418,7 @@ def run_watch_command(
         backup_dir=backup_dir,
         output_dir=output_dir,
         on_interval_change=on_interval_change,
+        pdf_dir=pdf_dir,
     )
 
     loop_args = (

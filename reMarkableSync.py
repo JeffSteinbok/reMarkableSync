@@ -919,7 +919,10 @@ def watch(
 
     from src.keyring_store import KEY_CLAUDE_API_KEY, KEY_GITHUB_TOKEN, get_secret
 
+    retry_failed_sync = False
+
     def run_once() -> int:
+        nonlocal retry_failed_sync
         # Reload config each cycle so edits apply without restarting watch.
         c = load_config()
         bdir = Path(c.get("backup_dir", "./remarkable_backup"))
@@ -943,15 +946,15 @@ def watch(
         if "ocr" in sync_actions and odir:
             from src.commands.pipeline import run_pipeline
 
-            return run_pipeline(
+            result = run_pipeline(
                 backup_dir=bdir,
                 output_dir=odir,
                 log_level=log_level,
                 skip_backup=False,
                 skip_convert=False,
                 force_backup=False,
-                force_convert=False,
-                force_export=False,
+                force_convert=retry_failed_sync,
+                force_export=retry_failed_sync,
                 ai_provider=ai_provider or "github",
                 ai_model=c.get("ai_model", ""),
                 ai_api_key=ai_api_key,
@@ -963,6 +966,8 @@ def watch(
                 use_cloud=eff_use_cloud,
                 wifi_host=eff_wifi_host,
             )
+            retry_failed_sync = result != 0
+            return result
 
         from src.commands.sync_command import run_sync_command
 
@@ -1002,6 +1007,7 @@ def watch(
             output_dir=output_dir,
             get_interval=get_interval,
             on_interval_change=_save_interval_secs,
+            pdf_dir=Path(cfg["pdf_dir"]) if cfg.get("pdf_dir") else None,
         )
     )
 

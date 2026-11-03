@@ -159,14 +159,19 @@ def run_pipeline(
         print("\n[2/3] Converting notebooks to PDF...")
 
         try:
-            _ok, converted_pages, merged_pdfs = run_conversion(
+            conversion_ok, converted_pages, merged_pdfs = run_conversion(
                 backup_dir=backup_dir,
                 output_dir=pdf_output_dir,
                 verbose=log_level,
                 updated_uuids=updated_uuids if not force_convert and not skip_backup else None,
-                updated_pages=updated_pages,
+                updated_pages=None if force_convert else updated_pages,
                 folder_filter=folder_filter,
+                notebook_filter=notebook_filter,
             )
+            if not conversion_ok:
+                logging.error("PDF conversion failed; Markdown export was not run.")
+                print_error("  ERR - PDF conversion failed. See the log for page errors.")
+                return 1
             print_success("  OK - PDF conversion done")
             all_page_pdfs = sorted(p for pages in converted_pages.values() for p in pages)
             write_manifest(
@@ -206,12 +211,15 @@ def run_pipeline(
                 ocr_engine = OCREngine(ai_provider=provider, use_ai=True)
                 print(f"  AI OCR provider: {ai_provider} ({provider.model})")
             else:
-                print_warn(
-                    f"  WRN - AI provider '{ai_provider}' not available "
-                    "(missing API key or package). OCR skipped."
+                logging.error(
+                    "AI provider '%s' is unavailable; check saved credentials and dependencies.",
+                    ai_provider,
                 )
+                print_error(f"  ERR - AI provider '{ai_provider}' is unavailable. See the log.")
+                return 1
         except (ValueError, ImportError) as exc:
-            logging.warning("Could not initialise AI provider: %s", exc)
+            logging.exception("Could not initialise AI provider: %s", exc)
+            return 1
     elif use_ai_ocr:
         print_warn("  WRN - --use-ai-ocr set but no --ai-provider given. OCR skipped.")
 
@@ -273,6 +281,10 @@ def run_pipeline(
             updated_pages=updated_pages,
         )
         write_manifest(backup_dir.parent / "updated_md.txt", sorted(exported_dirs), "updated_md")
+        if exporter.failed_pages:
+            logging.error("Markdown export failed for %d page(s)", exporter.failed_pages)
+            print_error(f"  ERR - Markdown export failed for {exporter.failed_pages} page(s).")
+            return 1
 
     # ------------------------------------------------------------------
     # Summary
