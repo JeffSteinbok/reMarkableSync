@@ -86,7 +86,7 @@ _LEVEL_MAP = {
 
 def is_interactive() -> bool:
     """Return True if running in an interactive terminal."""
-    if sys.stdout.isatty() or sys.stderr.isatty():
+    if any(stream is not None and stream.isatty() for stream in (sys.stdout, sys.stderr)):
         return True
     if os.environ.get("WT_SESSION"):  # Windows Terminal
         return True
