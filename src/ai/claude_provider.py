@@ -12,10 +12,10 @@ from typing import List
 
 from .base_provider import (
     CLEANUP_PROMPT,
-    TRANSCRIPTION_PROMPT,
     AIProviderError,
     AIRateLimitError,
     BaseAIProvider,
+    get_transcription_prompt,
 )
 
 
@@ -96,7 +96,7 @@ class ClaudeProvider(BaseAIProvider):
         if not content:
             return ""
 
-        prompt = TRANSCRIPTION_PROMPT
+        prompt = get_transcription_prompt()
         if context:
             prompt += f"\n\nNotebook context: {context}"
         content.append({"type": "text", "text": prompt})

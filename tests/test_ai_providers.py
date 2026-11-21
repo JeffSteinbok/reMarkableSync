@@ -91,6 +91,26 @@ class TestClaudeProvider:
         assert result == "Hello World"
         mock_client.messages.create.assert_called_once()
 
+    def test_transcribe_includes_custom_instructions(self, tmp_path):
+        """Custom OCR instructions must reach the Claude API prompt."""
+        img = tmp_path / "page_001.png"
+        img.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
+
+        mock_message = MagicMock()
+        mock_message.content = [MagicMock(text="Hello World")]
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = mock_message
+
+        p = ClaudeProvider(api_key="sk-dummy")
+        p._client = mock_client
+
+        with patch("src.config.load_custom_instructions", return_value="Always write BANANA"):
+            p.transcribe_handwriting([img])
+
+        _, kwargs = mock_client.messages.create.call_args
+        prompt_text = kwargs["messages"][0]["content"][-1]["text"]
+        assert "Always write BANANA" in prompt_text
+
 
 # ---------------------------------------------------------------------------
 # GitHubModelsProvider
@@ -143,6 +163,29 @@ class TestGitHubModelsProvider:
         result = p.transcribe_handwriting([img])
         assert result == "Test transcription"
         mock_client.chat.completions.create.assert_called_once()
+
+    def test_transcribe_includes_custom_instructions(self, tmp_path):
+        """Custom OCR instructions must reach the GitHub Models API prompt."""
+        img = tmp_path / "page_001.png"
+        img.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
+
+        mock_choice = MagicMock()
+        mock_choice.message.content = "Test transcription"
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+
+        mock_client = MagicMock()
+        mock_client.chat.completions.create.return_value = mock_response
+
+        p = GitHubModelsProvider(api_key="ghp_dummy")
+        p._client = mock_client
+
+        with patch("src.config.load_custom_instructions", return_value="Always write BANANA"):
+            p.transcribe_handwriting([img])
+
+        _, kwargs = mock_client.chat.completions.create.call_args
+        prompt_text = kwargs["messages"][0]["content"][-1]["text"]
+        assert "Always write BANANA" in prompt_text
 
 
 # ---------------------------------------------------------------------------
