@@ -171,6 +171,7 @@ def test_watch_logs_status_startup_errors_before_first_sync(monkeypatch, tmp_pat
     monkeypatch.setattr(root_logger, "level", root_logger.level)
     monkeypatch.setitem(sys.modules, "tkinter", None)
     monkeypatch.setattr(_WatchTray, "start", MagicMock())
+    monkeypatch.setattr(_WatchTray, "run", MagicMock(return_value=False))
 
     def fail_window_before_sync(*args):
         tray, process_lock = args[-2:]
