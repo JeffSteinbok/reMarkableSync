@@ -29,6 +29,7 @@ a = Analysis(
         ('../src/converters', 'src/converters'),
         ('../src/commands', 'src/commands'),
         ('../src/utils', 'src/utils'),
+        ('../docs/logo.png', 'docs'),
     ],
     hiddenimports=[
         'src',
@@ -74,6 +75,9 @@ a = Analysis(
         'PIL.ImageFont',
         'PIL.ImageColor',
         'PIL._imaging',
+        'PIL.ImageTk',
+        'tkinter',
+        'tkinter.ttk',
         # Additional hidden imports for paramiko/cryptography
         'cryptography.hazmat.backends.openssl',
         'cryptography.hazmat.bindings._openssl',
@@ -87,7 +91,6 @@ a = Analysis(
         'numpy',
         'pandas',
         'scipy',
-        'tkinter',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,

@@ -270,7 +270,7 @@ Page images are stored in a `_images/` subfolder next to the Markdown files.
 | AI OCR returns errors | Check API key/token, verify package installed (`anthropic` or `openai`), check rate limits |
 | Empty Markdown files | AI provider may have failed — check log file for details |
 | v6 notebooks not converting | Ensure `rmc` is installed (`pip install rmc`) — required for v6 .rm format |
-| Watch lock error | Delete `<backup-dir>/.remarkable_watch.lock` |
+| Watch lock error | Quit the existing watcher from its status icon; locks are stored locally, outside the backup |
 | Permission errors | Ensure output directories are writable; run as admin on Windows if needed |
 
 For any issue, re-run your command with `--log-level DBG` to get detailed output. See [How to get DEBUG logs](docs/debug-logs.md) for details.

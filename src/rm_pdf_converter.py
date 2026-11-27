@@ -131,6 +131,7 @@ def run_conversion(
 
     # Convert notebooks with per-page Rich progress bar
     successful = 0
+    failed = 0
     converted: Dict[str, List[Path]] = {}
     merged_pdfs: List[Path] = []
 
@@ -202,10 +203,18 @@ def run_conversion(
                     on_page_start=_on_page_start,
                 )
 
-                if results["output_files"]:
+                pdf_outputs = [
+                    path
+                    for path in results["output_files"]
+                    if isinstance(path, Path) and path.suffix.lower() == ".pdf"
+                ]
+                if results.get("failed_pages") or not pdf_outputs:
+                    failed += 1
+                    logging.error("PDF conversion failed for notebook %s", notebook["name"])
+                else:
                     successful += 1
                     page_pdfs = results.get("page_pdfs", [])
-                    merged = [f for f in results["output_files"] if isinstance(f, Path)]
+                    merged = pdf_outputs
                     merged_pdfs.extend(merged)
                     if page_pdfs and results.get("pdf_changed", True):
                         converted[notebook["uuid"]] = page_pdfs
@@ -214,7 +223,9 @@ def run_conversion(
                             "PDF unchanged after conversion, skipping MD: %s", notebook["name"]
                         )
             except Exception as e:
+                failed += 1
+                logging.exception("PDF conversion failed for notebook %s", notebook["name"])
                 print_error(f"  ERR - Failed to convert {notebook['name']}: {e}")
 
     print(f"  Conversion complete: {successful}/{len(notebooks)} notebooks converted")
-    return successful > 0, converted, merged_pdfs
+    return successful > 0 and failed == 0, converted, merged_pdfs

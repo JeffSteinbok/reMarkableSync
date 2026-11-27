@@ -23,7 +23,7 @@ from src.converters.v6_converter import V6Converter
 # Helpers
 # ---------------------------------------------------------------------------
 
-RM_HEADER_TEMPLATE = "reMarkable .lines file, version={v}          \n"
+RM_HEADER_TEMPLATE = "reMarkable .lines file, version={v}          "
 
 
 def _make_rm(tmp_path: Path, version: int, extra: bytes = b"") -> Path:
@@ -121,66 +121,36 @@ class TestV4CanConvert:
 class TestV4ConvertToPdf:
     """Tests for V4Converter.convert_to_pdf()."""
 
-    def test_returns_false_when_rmrl_unavailable(self, tmp_path):
+    def test_renders_without_rmrl(self, tmp_path):
         rm = _make_rm(tmp_path, 4)
         out = tmp_path / "out.pdf"
         with patch.dict("sys.modules", {"rmrl": None}):
             result = V4Converter().convert_to_pdf(rm, out)
-        assert result is False
-
-    def test_returns_false_when_rmrl_render_fails(self, tmp_path):
-        rm = _make_rm(tmp_path, 4)
-        out = tmp_path / "out.pdf"
-
-        fake_rmrl = MagicMock()
-        fake_rmrl.render.return_value = None  # simulate render failure
-
-        with patch.dict("sys.modules", {"rmrl": fake_rmrl}):
-            result = V4Converter().convert_to_pdf(rm, out)
-        assert result is False
-
-    def test_returns_false_when_svg_too_small(self, tmp_path):
-        rm = _make_rm(tmp_path, 4)
-        out = tmp_path / "out.pdf"
-
-        fake_rmrl = MagicMock()
-        fake_rmrl.render.return_value = b"tiny"  # < 100 bytes
-
-        with patch.dict("sys.modules", {"rmrl": fake_rmrl}):
-            result = V4Converter().convert_to_pdf(rm, out)
-        assert result is False
+        assert result is True
 
     def test_returns_false_for_nonexistent_input(self, tmp_path):
         out = tmp_path / "out.pdf"
         result = V4Converter().convert_to_pdf(tmp_path / "ghost.rm", out)
         assert result is False
 
-    def test_calls_svg_to_pdf_on_success(self, tmp_path):
+    def test_writes_valid_pdf(self, tmp_path):
         rm = _make_rm(tmp_path, 4)
         out = tmp_path / "out.pdf"
 
-        svg_content = b"<svg>" + b"x" * 200 + b"</svg>"
-        fake_rmrl = MagicMock()
-        fake_rmrl.render.return_value = svg_content
-
         converter = V4Converter()
-        with patch.dict("sys.modules", {"rmrl": fake_rmrl}):
-            with patch.object(converter, "svg_to_pdf", return_value=True) as mock_svg:
-                result = converter.convert_to_pdf(rm, out)
-
+        result = converter.convert_to_pdf(rm, out)
         assert result is True
-        mock_svg.assert_called_once()
+        assert out.read_bytes().startswith(b"%PDF")
 
-    def test_is_rmrl_available_reflects_import(self):
-        converter = V4Converter()
-        # Just verify the method exists and returns a bool
-        result = converter.is_rmrl_available()
-        assert isinstance(result, bool)
+    def test_truncated_legacy_input_is_rejected(self, tmp_path):
+        rm = _make_rm(tmp_path, 4)
+        rm.write_bytes(rm.read_bytes()[:-2])
+        assert not V4Converter().convert_to_pdf(rm, tmp_path / "out.pdf")
 
     def test_get_requirements_returns_list(self):
         reqs = V4Converter().get_requirements()
         assert isinstance(reqs, list)
-        assert any("rmrl" in r for r in reqs)
+        assert any("reportlab" in r for r in reqs)
 
     def test_get_conversion_info_returns_dict(self):
         info = V4Converter().get_conversion_info()
@@ -218,73 +188,41 @@ class TestV5CanConvert:
 class TestV5ConvertToPdf:
     """Tests for V5Converter.convert_to_pdf()."""
 
-    def test_returns_false_when_rmrl_unavailable(self, tmp_path):
+    def test_renders_without_rmrl(self, tmp_path):
         rm = _make_rm(tmp_path, 5)
         out = tmp_path / "out.pdf"
         with patch.dict("sys.modules", {"rmrl": None}):
             result = V5Converter().convert_to_pdf(rm, out)
-        assert result is False
+        assert result is True
 
-    def test_returns_false_when_rmrl_render_returns_none(self, tmp_path):
+    def test_writes_valid_pdf(self, tmp_path):
         rm = _make_rm(tmp_path, 5)
         out = tmp_path / "out.pdf"
-
-        fake_rmrl = MagicMock()
-        fake_rmrl.render.return_value = None
-
-        with patch.dict("sys.modules", {"rmrl": fake_rmrl}):
-            result = V5Converter().convert_to_pdf(rm, out)
-        assert result is False
-
-    def test_returns_false_when_svg_output_too_small(self, tmp_path):
-        rm = _make_rm(tmp_path, 5)
-        out = tmp_path / "out.pdf"
-
-        fake_rmrl = MagicMock()
-        fake_rmrl.render.return_value = b"short"
-
-        with patch.dict("sys.modules", {"rmrl": fake_rmrl}):
-            result = V5Converter().convert_to_pdf(rm, out)
-        assert result is False
-
-    def test_calls_svg_to_pdf_on_success(self, tmp_path):
-        rm = _make_rm(tmp_path, 5)
-        out = tmp_path / "out.pdf"
-
-        svg_content = b"<svg>" + b"x" * 200 + b"</svg>"
-        fake_rmrl = MagicMock()
-        fake_rmrl.render.return_value = svg_content
 
         converter = V5Converter()
-        with patch.dict("sys.modules", {"rmrl": fake_rmrl}):
-            with patch.object(converter, "svg_to_pdf", return_value=True) as mock_svg:
-                result = converter.convert_to_pdf(rm, out)
+        result = converter.convert_to_pdf(rm, out)
 
         assert result is True
-        mock_svg.assert_called_once()
+        assert out.read_bytes().startswith(b"%PDF")
 
-    def test_svg_to_pdf_failure_returns_false(self, tmp_path):
+    def test_write_failure_returns_false(self, tmp_path):
         rm = _make_rm(tmp_path, 5)
         out = tmp_path / "out.pdf"
 
-        svg_content = b"<svg>" + b"x" * 200 + b"</svg>"
-        fake_rmrl = MagicMock()
-        fake_rmrl.render.return_value = svg_content
-
         converter = V5Converter()
-        with patch.dict("sys.modules", {"rmrl": fake_rmrl}):
-            with patch.object(converter, "svg_to_pdf", return_value=False):
-                result = converter.convert_to_pdf(rm, out)
+        with patch("reportlab.pdfgen.canvas.Canvas", side_effect=OSError("cannot write")):
+            result = converter.convert_to_pdf(rm, out)
 
         assert result is False
 
-    def test_is_rmrl_available_returns_bool(self):
-        result = V5Converter().is_rmrl_available()
-        assert isinstance(result, bool)
+    def test_truncated_legacy_input_is_rejected(self, tmp_path):
+        rm = _make_rm(tmp_path, 5)
+        rm.write_bytes(rm.read_bytes()[:-2])
+        assert not V5Converter().convert_to_pdf(rm, tmp_path / "out.pdf")
 
-    def test_get_requirements_includes_rmrl(self):
+    def test_get_requirements_includes_reportlab(self):
         reqs = V5Converter().get_requirements()
-        assert any("rmrl" in r for r in reqs)
+        assert any("reportlab" in r for r in reqs)
 
     def test_str_representation(self):
         assert "v5" in str(V5Converter())
@@ -321,7 +259,7 @@ class TestV6ConvertToPdf:
         rm = _make_rm(tmp_path, 6)
         out = tmp_path / "out.pdf"
 
-        with patch("subprocess.run", side_effect=FileNotFoundError("rmc not found")):
+        with patch.dict("sys.modules", {"rmc.exporters.svg": None}):
             result = V6Converter().convert_to_pdf(rm, out)
 
         assert result is False
@@ -334,7 +272,7 @@ class TestV6ConvertToPdf:
         mock_result.returncode = 1
         mock_result.stderr = "conversion error"
 
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("rmc.exporters.svg.rm_to_svg", side_effect=ValueError("conversion error")):
             result = V6Converter().convert_to_pdf(rm, out)
 
         assert result is False
@@ -346,19 +284,17 @@ class TestV6ConvertToPdf:
         mock_result = MagicMock()
         mock_result.returncode = 0
 
-        with patch("subprocess.run", return_value=mock_result):
+        with patch("rmc.exporters.svg.rm_to_svg"):
             # rmc succeeds but doesn't write the SVG file
             result = V6Converter().convert_to_pdf(rm, out)
 
         assert result is False
 
-    def test_returns_false_on_timeout(self, tmp_path):
-        import subprocess
-
+    def test_returns_false_on_read_error(self, tmp_path):
         rm = _make_rm(tmp_path, 6)
         out = tmp_path / "out.pdf"
 
-        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(["rmc"], 30)):
+        with patch("rmc.exporters.svg.rm_to_svg", side_effect=OSError("cannot read file")):
             result = V6Converter().convert_to_pdf(rm, out)
 
         assert result is False
@@ -372,13 +308,16 @@ class TestV6ConvertToPdf:
 
         converter = V6Converter()
 
-        def _fake_run(cmd, **kwargs):
+        def _fake_run(rm_path, svg_path):
             # Simulate rmc writing the SVG file
-            svg_path = Path(cmd[4])  # -o <svg_file>
+            svg_path = Path(svg_path)
             svg_path.write_bytes(b"<svg>" + b"x" * 200 + b"</svg>")
             return mock_run
 
-        with patch("subprocess.run", side_effect=_fake_run):
+        with (
+            patch("rmc.exporters.svg.rm_to_svg", side_effect=_fake_run),
+            patch("subprocess.run", side_effect=AssertionError("Must not use an external CLI")),
+        ):
             with patch.object(converter, "svg_to_pdf", return_value=True) as mock_svg:
                 result = converter.convert_to_pdf(rm, out)
 
@@ -395,6 +334,30 @@ class TestV6ConvertToPdf:
 
     def test_str_representation(self):
         assert "v6" in str(V6Converter())
+
+
+@pytest.mark.parametrize("version,converter", [(4, V4Converter), (5, V5Converter)])
+def test_legacy_strokes_render_without_rmrl_and_preserve_extended_height(
+    tmp_path, version, converter
+):
+    from PyPDF2 import PdfReader
+
+    header = RM_HEADER_TEMPLATE.format(v=version).encode("ascii")
+    stroke_header = (
+        struct.pack("<IIIfII", 2, 0, 0, 2.0, 0, 2)
+        if version == 5
+        else struct.pack("<IIIfI", 2, 0, 0, 2.0, 2)
+    )
+    points = struct.pack("<12f", 100, 100, 0, 0, 2, 1, 200, 2500, 0, 0, 2, 1)
+    rm = tmp_path / "legacy.rm"
+    rm.write_bytes(header + struct.pack("<II", 1, 1) + stroke_header + points)
+    pdf = tmp_path / "legacy.pdf"
+
+    with patch.dict("sys.modules", {"rmrl": None}):
+        assert converter().convert_to_pdf(rm, pdf)
+    page = PdfReader(str(pdf)).pages[0]
+    assert float(page.mediabox.height) > 1872 * 72 / 226
+    assert b" l S" in page.get_contents().get_data()
 
 
 # ---------------------------------------------------------------------------

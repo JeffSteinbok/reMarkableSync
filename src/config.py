@@ -6,8 +6,10 @@ Config is stored as JSON at ~/.config/remarkablesync/config.json (Linux/macOS)
 or %APPDATA%/remarkablesync/config.json (Windows).
 """
 
+import hashlib
 import json
 import logging
+import os
 import platform
 from pathlib import Path
 from typing import Any, Dict
@@ -30,9 +32,27 @@ def get_config_dir() -> Path:
     return base / "remarkablesync"
 
 
+def get_runtime_dir() -> Path:
+    """Return machine-local storage for locks and other runtime state."""
+    if platform.system() == "Windows":
+        base = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+    elif platform.system() == "Darwin":
+        base = Path.home() / "Library" / "Caches"
+    else:
+        base = Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state")
+    return base / "remarkablesync"
+
+
+def get_lock_dir(backup_dir: Path) -> Path:
+    """Keep per-backup locks local, even when the backup is cloud-synced."""
+    identity = os.path.normcase(str(backup_dir.resolve()))
+    key = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:16]
+    return get_runtime_dir() / "locks" / key
+
+
 def get_log_dir() -> Path:
-    """Return the log directory."""
-    return get_config_dir() / "logs"
+    """Return the machine-local log directory."""
+    return get_runtime_dir() / "logs"
 
 
 def get_config_path() -> Path:

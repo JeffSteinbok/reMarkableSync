@@ -22,9 +22,9 @@ from src.converters.v6_converter import V6Converter
 # Fixture helpers (creates real .rm binary fixture files)
 # ---------------------------------------------------------------------------
 
-RM_HEADER_V4 = b"reMarkable .lines file, version=4          \n"
-RM_HEADER_V5 = b"reMarkable .lines file, version=5          \n"
-RM_HEADER_V6 = b"reMarkable .lines file, version=6          \n"
+RM_HEADER_V4 = b"reMarkable .lines file, version=4          "
+RM_HEADER_V5 = b"reMarkable .lines file, version=5          "
+RM_HEADER_V6 = b"reMarkable .lines file, version=6          "
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "rm_files"
 
@@ -143,14 +143,10 @@ class TestConvertToPdfIntegration:
 
         converter = V6Converter()
 
-        def _fake_rmc(cmd, **kwargs):
-            svg_path = Path(cmd[4])
-            svg_path.write_bytes(b"<svg>" + b"x" * 200 + b"</svg>")
-            r = MagicMock()
-            r.returncode = 0
-            return r
+        def _fake_rm_to_svg(rm_path, svg_path):
+            Path(svg_path).write_bytes(b"<svg>" + b"x" * 200 + b"</svg>")
 
-        with patch("subprocess.run", side_effect=_fake_rmc):
+        with patch("rmc.exporters.svg.rm_to_svg", side_effect=_fake_rm_to_svg):
             with patch.object(converter, "svg_to_pdf") as mock_svg:
 
                 def _write_pdf(svg_path, pdf_path):
@@ -372,13 +368,9 @@ class TestFullPipelineIntegration:
         out_dir = tmp_path / "output"
         out_dir.mkdir()
 
-        def _fake_rmc(cmd, **kwargs):
-            svg_path = Path(cmd[4])
-            svg_path.parent.mkdir(parents=True, exist_ok=True)
-            svg_path.write_bytes(b"<svg>" + b"x" * 200 + b"</svg>")
-            r = MagicMock()
-            r.returncode = 0
-            return r
+        def _fake_rm_to_svg(rm_path, svg_path):
+            Path(svg_path).parent.mkdir(parents=True, exist_ok=True)
+            Path(svg_path).write_bytes(b"<svg>" + b"x" * 200 + b"</svg>")
 
         def _fake_svg_to_pdf(svg_file, pdf_file):
             pdf_file.parent.mkdir(parents=True, exist_ok=True)
@@ -391,7 +383,7 @@ class TestFullPipelineIntegration:
             return True
 
         with (
-            patch("subprocess.run", side_effect=_fake_rmc),
+            patch("rmc.exporters.svg.rm_to_svg", side_effect=_fake_rm_to_svg),
             patch(
                 "src.converters.base_converter.BaseConverter.svg_to_pdf",
                 side_effect=_fake_svg_to_pdf,

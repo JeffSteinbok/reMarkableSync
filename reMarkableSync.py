@@ -35,7 +35,7 @@ import click
 
 from src.__version__ import __version__
 from src.backup.connection import USB_HOST
-from src.utils.logging import LogLevel, LOG_FILE_NAME
+from src.utils.logging import LOG_FILE_NAME, LogLevel
 
 # ---------------------------------------------------------------------------
 # Shared connection options (reused across commands)
@@ -96,9 +96,9 @@ def print_header():
     from rich.panel import Panel
     from rich.text import Text
 
-    from src.config import get_config_dir
+    from src.config import get_log_dir
 
-    log_file = get_config_dir() / LOG_FILE_NAME
+    log_file = get_log_dir() / LOG_FILE_NAME
     console = Console(highlight=False)
 
     # Create header panel - using brand blue color
@@ -639,11 +639,11 @@ def test_md(
     import tempfile
 
     from src.ai import get_provider as get_ai_provider
-    from src.config import get_config_dir, load_config
+    from src.config import get_log_dir, load_config
     from src.ocr.ocr_engine import OCREngine
     from src.utils.logging import setup_logging
 
-    setup_logging(log_level, log_dir=get_config_dir())
+    setup_logging(log_level, log_dir=get_log_dir())
 
     # Check config version compatibility
     if not check_config_compatibility():
@@ -843,7 +843,7 @@ def watch(
     Use --foreground to keep it attached.
     """
     from src.commands.watch_command import INTERVAL_CHOICES, run_watch_command
-    from src.config import load_config, save_config
+    from src.config import get_lock_dir, load_config, save_config
 
     cfg = load_config()
 
@@ -890,7 +890,7 @@ def watch(
         backup_dir = Path(cfg.get("backup_dir", "./remarkable_backup"))
         from src.commands.watch_command import FileLock
 
-        process_lock_path = backup_dir / ".remarkable_watch_process.lock"
+        process_lock_path = get_lock_dir(backup_dir) / ".remarkable_watch_process.lock"
         test_lock = FileLock(process_lock_path)
         if not test_lock.acquire():
             click.echo("reMarkableSync watch is already running.")
@@ -919,7 +919,10 @@ def watch(
 
     from src.keyring_store import KEY_CLAUDE_API_KEY, KEY_GITHUB_TOKEN, get_secret
 
+    retry_failed_sync = False
+
     def run_once() -> int:
+        nonlocal retry_failed_sync
         # Reload config each cycle so edits apply without restarting watch.
         c = load_config()
         bdir = Path(c.get("backup_dir", "./remarkable_backup"))
@@ -943,15 +946,15 @@ def watch(
         if "ocr" in sync_actions and odir:
             from src.commands.pipeline import run_pipeline
 
-            return run_pipeline(
+            result = run_pipeline(
                 backup_dir=bdir,
                 output_dir=odir,
                 log_level=log_level,
                 skip_backup=False,
                 skip_convert=False,
                 force_backup=False,
-                force_convert=False,
-                force_export=False,
+                force_convert=retry_failed_sync,
+                force_export=retry_failed_sync,
                 ai_provider=ai_provider or "github",
                 ai_model=c.get("ai_model", ""),
                 ai_api_key=ai_api_key,
@@ -963,6 +966,8 @@ def watch(
                 use_cloud=eff_use_cloud,
                 wifi_host=eff_wifi_host,
             )
+            retry_failed_sync = result != 0
+            return result
 
         from src.commands.sync_command import run_sync_command
 
@@ -1002,6 +1007,7 @@ def watch(
             output_dir=output_dir,
             get_interval=get_interval,
             on_interval_change=_save_interval_secs,
+            pdf_dir=Path(cfg["pdf_dir"]) if cfg.get("pdf_dir") else None,
         )
     )
 
@@ -1041,6 +1047,68 @@ def _detach_watch():
 # ---------------------------------------------------------------------------
 
 
+@cli.command("status-ui-smoke-test", hidden=True)
+def status_ui_smoke_test():
+    """Exercise the packaged status UI without tablet access or configuration."""
+    from src.commands.watch_command import _StatusWindow, _WatchTray
+
+    errors = []
+
+    class SmokeWindow(_StatusWindow):
+        stage = 0
+
+        def _poll(self):
+            super()._poll()
+            if self._close_requested.is_set():
+                return
+            try:
+                root = self._root
+                root.update_idletasks()
+                if self.stage == 0:
+                    assert root.state() == "normal", "Status window is not visible"
+                    assert self._icon_photo.width() > 0, "Window icon did not load"
+                    assert self._progress_var.get() == 25, "Progress did not update"
+                    assert "Smoke test" in self._log_text.get("1.0", "end")
+                    if getattr(sys, "frozen", False):
+                        bundle = Path(sys._MEIPASS)
+                        assert Path(root.tk.eval("info library")).is_relative_to(bundle)
+                        assert Path(root.tk.eval("set tk_library")).is_relative_to(bundle)
+                        assert (bundle / "docs" / "logo.png").is_file()
+                    self._hide()
+                    assert root.state() == "withdrawn", "Window did not hide"
+                    self._tray.show_status_window()
+                elif self.stage == 1:
+                    assert root.state() == "normal", "Window did not reopen"
+                    self._tray.set_status("Idle")
+                    self._tray.clear_progress()
+                    self._tray.set_detail("Sync continues after closing the window")
+                else:
+                    assert not self._progress_visible, "Idle progress remained visible"
+                    assert "Sync continues" in self._log_text.get("1.0", "end")
+                    self._tray.stop()
+                self.stage += 1
+            except Exception as exc:
+                errors.append(repr(exc))
+                self.close()
+
+    tray = _WatchTray(mode="sync", enabled=False, interval=300)
+    for _ in range(2):
+        tray.set_status("Running")
+        tray.set_progress(1, 4, "Smoke test")
+        tray.set_detail("Smoke test")
+        window = SmokeWindow(tray)
+        tray._status_window = window
+        window.show()
+        window.start()
+        window.join(timeout=15)
+        if window.is_alive():
+            window.close()
+            raise click.ClickException("Status UI smoke test timed out")
+        if errors or window.stage != 3 or tray._status_window is not None:
+            raise click.ClickException(f"Status UI smoke test failed: {errors}")
+    click.echo("Status UI smoke test passed (Tcl/Tk, icon, progress, logs, hide/reopen, restart)")
+
+
 def main():
     """Entry point for the application.
 
@@ -1051,7 +1119,17 @@ def main():
     Config-based defaults (backup_dir, output_dir, connection, etc.) are
     injected as CLI args so the subcommand sees them.
     """
-    known_commands = {"backup", "pdf", "sync", "md", "config", "watch", "check-update", "test-md"}
+    known_commands = {
+        "backup",
+        "pdf",
+        "sync",
+        "md",
+        "config",
+        "watch",
+        "check-update",
+        "test-md",
+        "status-ui-smoke-test",
+    }
     has_command = any(arg in known_commands for arg in sys.argv[1:])
 
     if not has_command and "--version" not in sys.argv and "--help" not in sys.argv:

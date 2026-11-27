@@ -6,6 +6,42 @@ from unittest.mock import MagicMock
 from src.pdf_md_converter import MarkdownExporter, _file_hash
 from src.utils import sanitize_name
 
+
+def test_failed_ocr_is_not_reported_as_a_successful_export(tmp_path):
+    from src.ai.base_provider import AIProviderError
+
+    pdf = tmp_path / "page.pdf"
+    _write_dummy_pdf(pdf)
+    ocr = MagicMock()
+    ocr.pdf_to_images.return_value = [tmp_path / "image.png"]
+    ocr.ai_provider.transcribe_handwriting.side_effect = AIProviderError("API rejected request")
+    exporter = MarkdownExporter(tmp_path / "out", tmp_path, ocr_engine=ocr, embed_images=False)
+
+    result = exporter.export_notebook(_make_notebook("Failed note", "failed"), pdf)
+
+    assert result is None
+    assert exporter.failed_pages == 1
+    assert not list((tmp_path / "out" / "Failed note").glob("*.md"))
+
+
+def test_forced_export_counts_all_pages_in_ocr_progress(tmp_path, caplog):
+    pdf = tmp_path / "page.pdf"
+    _write_dummy_pdf(pdf)
+    exporter = MarkdownExporter(tmp_path / "out", tmp_path, embed_images=False)
+
+    with caplog.at_level("INFO"):
+        exported, skipped, _ = exporter.export_all(
+            [_make_notebook("Forced note", "forced")],
+            tmp_path,
+            force=True,
+            converted_pages={"forced": [pdf]},
+            updated_pages={},
+        )
+
+    assert (exported, skipped) == (1, 0)
+    assert "OCR page 1 of 1" in caplog.text
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

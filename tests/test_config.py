@@ -13,6 +13,40 @@ import pytest
 from tests.mock_connection import MockConnection
 
 
+@pytest.mark.parametrize("system", ["Windows", "Darwin", "Linux"])
+def test_runtime_storage_uses_local_platform_directories(monkeypatch, tmp_path, system):
+    from pathlib import Path
+
+    from src.config import get_log_dir, get_runtime_dir
+
+    monkeypatch.setattr("src.config.platform.system", lambda: system)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "local"))
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+    bases = {
+        "Windows": tmp_path / "local",
+        "Darwin": tmp_path / "home" / "Library" / "Caches",
+        "Linux": tmp_path / "state",
+    }
+
+    assert get_runtime_dir() == bases[system] / "remarkablesync"
+    assert get_log_dir().is_relative_to(get_runtime_dir())
+
+
+def test_local_locks_preserve_per_backup_identity(monkeypatch, tmp_path):
+    from src.config import get_lock_dir
+
+    runtime = tmp_path / "local"
+    monkeypatch.setattr("src.config.get_runtime_dir", lambda: runtime)
+    backup = tmp_path / "OneDrive" / "backup"
+
+    first = get_lock_dir(backup)
+
+    assert first.is_relative_to(runtime)
+    assert first == get_lock_dir(backup.parent / "other" / ".." / "backup")
+    assert first != get_lock_dir(backup.parent / "different-backup")
+
+
 class TestMockConnection:
     """Tests for the mock tablet connection."""
 

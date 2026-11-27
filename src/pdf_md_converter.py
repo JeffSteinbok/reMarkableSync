@@ -64,6 +64,7 @@ class MarkdownExporter:
         self.tags = tags or ["remarkable"]
         self.embed_images = embed_images
         self.registry = registry
+        self.failed_pages = 0
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -331,9 +332,11 @@ class MarkdownExporter:
 
         if not pages_to_process:
             logging.warning("No PDFs found for notebook '%s'", name)
+            self.failed_pages += 1
             return None
 
         total_pages = len(pages_to_process)
+        failed_before = self.failed_pages
 
         with tempfile.TemporaryDirectory(prefix="rs_md_") as tmp_str:
             tmp_dir = Path(tmp_str)
@@ -375,7 +378,7 @@ class MarkdownExporter:
 
                 # OCR this page
                 page_text = ""
-                ocr_failed = False
+                ocr_failed = rate_limited
                 if self.ocr_engine and not rate_limited:
                     from src.ai.base_provider import AIProviderError, AIRateLimitError
                     from src.utils.console import print_error, print_warn
@@ -383,6 +386,9 @@ class MarkdownExporter:
                     raster_images = self.ocr_engine.pdf_to_images(
                         pg_pdf, tmp_dir / f"ocr_page_{pg_idx:03d}"
                     )
+                    if not raster_images:
+                        logging.error("Could not rasterise '%s' page %d for OCR", name, pg_idx)
+                        ocr_failed = True
                     if raster_images and self.ocr_engine.use_ai and self.ocr_engine.ai_provider:
                         try:
                             raw = self.ocr_engine.ai_provider.transcribe_handwriting(
@@ -407,6 +413,7 @@ class MarkdownExporter:
                             ocr_failed = True
 
                 if ocr_failed:
+                    self.failed_pages += 1
                     if on_page_done:
                         on_page_done(pg_idx, total_pages)
                     continue
@@ -435,10 +442,14 @@ class MarkdownExporter:
                         fh.write(md_content)
                 except OSError as exc:
                     logging.error("Failed to write page %d of '%s': %s", pg_idx, name, exc)
+                    self.failed_pages += 1
 
                 if on_page_done:
                     on_page_done(pg_idx, total_pages)
 
+        if self.failed_pages != failed_before:
+            logging.error("Markdown export incomplete for notebook %s", name)
+            return None
         logging.info("Exported notebook: %s (%d pages)", name, total_pages)
         return notebook_dir
 
@@ -494,7 +505,7 @@ class MarkdownExporter:
 
             # Count only pages that will actually be processed
             nb_changed = None
-            if updated_pages is not None:
+            if not force and updated_pages is not None:
                 nb_changed = updated_pages.get(nb["uuid"], set())
             if nb_changed is not None and converted_pages and nb["uuid"] in converted_pages:
                 total_ocr_pages += sum(

@@ -36,7 +36,9 @@ def run_backup_command(
     Returns:
         Exit code (0 for success, 1 for failure)
     """
-    log_dir = backup_dir.parent
+    from ..config import get_log_dir
+
+    log_dir = get_log_dir()
     setup_logging(log_level, log_dir=log_dir)
 
     from ..utils.console import print_section

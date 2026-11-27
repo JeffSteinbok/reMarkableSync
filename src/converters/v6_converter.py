@@ -9,12 +9,11 @@ Entry Point:
 
 This module provides:
 - Conversion of v6 format .rm files (current ReMarkable format)
-- Integration with rmc command-line tool
+- Integration with the rmc Python library
 - SVG intermediate format processing
 """
 
-import subprocess
-import sys
+import importlib.util
 import tempfile
 from pathlib import Path
 
@@ -25,7 +24,7 @@ class V6Converter(BaseConverter):
     """Converter for ReMarkable v6 format files using rmc library.
 
     The v6 format is the current format used by ReMarkable tablets.
-    This converter uses the 'rmc' command-line tool to convert files
+    This converter uses the 'rmc' Python library to convert files
     through an SVG intermediate format.
 
     Conversion Process:
@@ -54,7 +53,7 @@ class V6Converter(BaseConverter):
         return version == "6"
 
     def convert_to_pdf(self, rm_file: Path, output_file: Path) -> bool:
-        """Convert a v6 .rm file to PDF using rmc tool.
+        """Convert a v6 .rm file to PDF using the rmc Python API.
 
         Uses rmc to convert the .rm file to SVG format first, then
         converts the SVG to PDF using svglib/reportlab.
@@ -72,34 +71,18 @@ class V6Converter(BaseConverter):
                 temp_path = Path(temp_dir)
                 svg_file = temp_path / f"{rm_file.stem}.svg"
 
-                _no_window = {}
-                if sys.platform == "win32":
-                    _no_window["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
+                from rmc.exporters.svg import rm_to_svg
 
-                # Step 1: Convert .rm to SVG using rmc
                 self.logger.debug("Converting %s to SVG using rmc", rm_file.name)
-                result = subprocess.run(
-                    ["rmc", "-t", "svg", "-o", str(svg_file), str(rm_file)],
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
-                    check=False,
-                    **_no_window,
-                )
-
-                if result.returncode != 0:
-                    self.logger.debug(
-                        "rmc conversion failed for %s: %s", rm_file.name, result.stderr
-                    )
-                    return False
+                rm_to_svg(rm_file, svg_file)
 
                 if not svg_file.exists():
-                    self.logger.debug("rmc did not create SVG file for %s", rm_file.name)
+                    self.logger.error("rmc did not create SVG file for %s", rm_file.name)
                     return False
 
                 # Check if SVG file has reasonable content
                 if svg_file.stat().st_size < 100:
-                    self.logger.debug("SVG file too small for %s", rm_file.name)
+                    self.logger.error("SVG file too small for %s", rm_file.name)
                     return False
 
                 # Step 2: Convert SVG to PDF
@@ -112,37 +95,20 @@ class V6Converter(BaseConverter):
                     )
                     return True
 
-                self.logger.debug("SVG to PDF conversion failed for %s", rm_file.name)
+                self.logger.error("SVG to PDF conversion failed for %s", rm_file.name)
                 return False
 
-        except subprocess.TimeoutExpired:
-            self.logger.warning("rmc conversion timeout for %s", rm_file.name)
-            return False
-        except Exception as e:  # noqa: BLE001
-            self.logger.debug("v6 conversion error for %s: %s", rm_file.name, e)
+        except Exception:
+            self.logger.exception("v6 conversion failed for %s", rm_file.name)
             return False
 
     def is_rmc_available(self) -> bool:
-        """Check if the rmc tool is available on the system.
+        """Check if the rmc library is installed in this interpreter.
 
         Returns:
             bool: True if rmc command is available, False otherwise
         """
-        try:
-            kwargs = {}
-            if sys.platform == "win32":
-                kwargs["creationflags"] = 0x08000000
-            result = subprocess.run(
-                ["rmc", "--version"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-                check=False,
-                **kwargs,
-            )
-            return result.returncode == 0
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            return False
+        return importlib.util.find_spec("rmc") is not None
 
     def get_requirements(self) -> list[str]:
         """Get the external requirements for this converter.
@@ -150,4 +116,4 @@ class V6Converter(BaseConverter):
         Returns:
             list[str]: List of required external tools/libraries
         """
-        return ["rmc command-line tool", "svglib Python library", "reportlab Python library"]
+        return ["rmc Python library", "svglib Python library", "reportlab Python library"]

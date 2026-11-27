@@ -16,19 +16,19 @@ reMarkableSync convert --log-level DBG
 This does two things:
 
 1. **Prints** detailed debug output to the console
-2. **Writes** a full log to `remarkablesync.log` in your backup directory's parent folder
+2. **Writes** a full log to the machine-local `remarkablesync.log` file
 
 ## Finding the Log File
 
-The log file is written to your backup directory's parent:
+Logs stay outside your backup and export directories so cloud sync is not blocked by open runtime files:
 
 | Platform | Default Location |
 |----------|-----------------|
-| macOS    | `~/Library/Application Support/remarkablesync/remarkablesync.log` |
-| Windows  | `%LOCALAPPDATA%\remarkablesync\remarkablesync.log` |
-| Linux    | `~/.local/share/remarkablesync/remarkablesync.log` |
+| macOS    | `~/Library/Caches/remarkablesync/logs/remarkablesync.log` |
+| Windows  | `%LOCALAPPDATA%\remarkablesync\logs\remarkablesync.log` |
+| Linux    | `~/.local/state/remarkablesync/logs/remarkablesync.log` |
 
-If you've set a custom backup directory, the log file is in its parent folder.
+On Linux, `XDG_STATE_HOME` overrides `~/.local/state`. The CLI header and the tray's **Open Log File** item point to the current log.
 
 ## Attaching to a Bug Report
 
