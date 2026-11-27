@@ -35,14 +35,28 @@ jobs:
           sed -i '' "s|sha256 \".*\"|sha256 \"${{ steps.sha256.outputs.sha256 }}\"|" release/remarkablesync.rb
 
       - name: Install and test candidate formula
+        shell: bash
         env:
           TAP_REPO: ${{ secrets.HOMEBREW_TAP_REPO }}
           HOMEBREW_NO_AUTO_UPDATE: "1"
         run: |
+          formula="$TAP_REPO/remarkablesync"
           brew tap "$TAP_REPO"
+          brew trust --formula "$formula"
           cp release/remarkablesync.rb "$(brew --repository "$TAP_REPO")/Formula/remarkablesync.rb"
-          brew install --build-from-source "$TAP_REPO/remarkablesync"
-          brew test "$TAP_REPO/remarkablesync"
+
+          install_log=$(mktemp)
+          trap 'rm -f "$install_log"' EXIT
+          if ! brew install --build-from-source "$formula" 2>&1 | tee "$install_log"; then
+            if grep -Fq "Failed to fix install linkage" "$install_log" &&
+               grep -Eq 'Failed changing dylib ID of .*/Cellar/remarkablesync/[^/]+/libexec/.*/site-packages/jiter/jiter\.[^/]+\.so$' "$install_log" &&
+               brew --prefix --installed "$formula" >/dev/null; then
+              echo "::warning::Homebrew reported the known jiter linkage failure after installing the keg. Running the required formula tests."
+            else
+              exit 1
+            fi
+          fi
+          brew test "$formula"
 
       - name: Commit and push tested formula
         env:
