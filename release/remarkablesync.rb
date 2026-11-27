@@ -42,6 +42,13 @@ class Remarkablesync < Formula
   end
 
   test do
+    if OS.mac?
+      # Include libraries in hidden wheel directories such as PIL/.dylibs.
+      libexec.glob("**/*.{so,dylib}", File::FNM_DOTMATCH).each do |binary|
+        system "/usr/bin/codesign", "--verify", binary
+      end
+    end
+
     # Test that the command runs and shows help
     assert_match "reMarkableSync", shell_output("#{bin}/reMarkableSync --help")
 
