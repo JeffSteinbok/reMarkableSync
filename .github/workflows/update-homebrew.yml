@@ -34,17 +34,36 @@ jobs:
           sed -i '' "s|url \".*\"|url \"https://github.com/${{ github.repository }}/archive/refs/tags/${{ steps.release.outputs.tag }}.tar.gz\"|" release/remarkablesync.rb
           sed -i '' "s|sha256 \".*\"|sha256 \"${{ steps.sha256.outputs.sha256 }}\"|" release/remarkablesync.rb
 
-      - name: Commit and push to tap repository
+      - name: Install and test candidate formula
+        shell: bash
+        env:
+          TAP_REPO: ${{ secrets.HOMEBREW_TAP_REPO }}
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: |
+          formula="$TAP_REPO/remarkablesync"
+          brew tap "$TAP_REPO"
+          brew trust --formula "$formula"
+          cp release/remarkablesync.rb "$(brew --repository "$TAP_REPO")/Formula/remarkablesync.rb"
+
+          install_log=$(mktemp)
+          trap 'rm -f "$install_log"' EXIT
+          if ! brew install --build-from-source "$formula" 2>&1 | tee "$install_log"; then
+            if grep -Fq "Failed to fix install linkage" "$install_log" &&
+               grep -Eq 'Failed changing dylib ID of .*/Cellar/remarkablesync/[^/]+/libexec/.*/site-packages/jiter/jiter\.[^/]+\.so$' "$install_log" &&
+               brew --prefix --installed "$formula" >/dev/null; then
+              echo "::warning::Homebrew reported the known jiter linkage failure after installing the keg. Running the required formula tests."
+            else
+              exit 1
+            fi
+          fi
+          brew test "$formula"
+
+      - name: Commit and push tested formula
         env:
           TAP_REPO: ${{ secrets.HOMEBREW_TAP_REPO }}  # Should be "jeffsteinbok/homebrew-remarkablesync"
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
-          # Clone the tap repository
-          git clone https://${GH_TOKEN}@github.com/${TAP_REPO}.git tap-repo
-          cd tap-repo
-
-          # Copy updated formula
-          cp ../release/remarkablesync.rb Formula/remarkablesync.rb
+          cd "$(brew --repository "$TAP_REPO")"
 
           # Configure git
           git config user.name "github-actions[bot]"
@@ -53,11 +72,4 @@ jobs:
           # Commit and push
           git add Formula/remarkablesync.rb
           git commit -m "Update reMarkableSync to ${{ steps.release.outputs.version }}"
-          git push origin main
-
-      - name: Test formula
-        continue-on-error: true
-        run: |
-          brew tap ${{ secrets.HOMEBREW_TAP_REPO }}
-          brew install remarkablesync
-          brew test remarkablesync
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${TAP_REPO}.git" HEAD:main
